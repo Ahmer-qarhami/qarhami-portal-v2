@@ -1,0 +1,45 @@
+@import url("https://fonts.googleapis.com/css2?family=Cabin:ital,wght@0,400..700;1,400..700&display=swap");
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  font-family: "Cabin", sans-serif;
+}
+
+@layer utilities {
+  .scrollbar::-webkit-scrollbar {
+    width: 20px;
+    height: 20px;
+  }
+
+  .scrollbar::-webkit-scrollbar-track {
+    border-radius: 100vh;
+    background: #f7f4ed;
+  }
+
+  .scrollbar::-webkit-scrollbar-thumb {
+    background: #e0cbcb;
+    border-radius: 100vh;
+    border: 3px solid #f6f7ed;
+  }
+
+  .scrollbar::-webkit-scrollbar-thumb:hover {
+    background: #c0a0b9;
+  }
+}
+
+body {
+  @apply bg-indigo-50;
+}
+
+.my-button {
+  @apply bg-indigo-50 text-indigo-500 border-indigo-500 hover:bg-white hover:text-indigo-500 font-bold py-2 px-4 rounded !important;
+}
+
+.link-column {
+  @apply text-indigo-500;
+}
