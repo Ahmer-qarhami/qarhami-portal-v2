@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Button, Table, message, Input } from "antd";
 import { SearchOutlined, DownloadOutlined } from "@ant-design/icons";
+import LoadingSpinner from "../components/LoadingSpinner.jsx";
 import { getAllActiveDevices } from "../api/Devices";
 import * as XLSX from "xlsx";
 

@@ -31,4 +31,13 @@ export default defineConfig({
       },
     }),
   ],
+  server: {
+    proxy: {
+      "/api/openphone": {
+        target: "https://api.openphone.com",
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/openphone/, ""),
+      },
+    },
+  },
 });

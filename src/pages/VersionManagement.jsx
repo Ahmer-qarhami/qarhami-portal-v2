@@ -32,6 +32,7 @@ import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 const { TextArea } = Input;
 import "../App.css";
+import LoadingSpinner from "../components/LoadingSpinner.jsx";
 import {
   uploadData,
   getAllDevices,
@@ -40,6 +41,7 @@ import {
   updateVersion,
   updateBulkVersions,
   getAllVersions,
+  resetWhatsNew,
 } from "../api/Devices";
 import dayjs from "dayjs";
 
@@ -95,6 +97,7 @@ const VersionManagement = () => {
   });
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
   const [expandPanel, setExpandPanel] = useState([]);
   const [isEditing, setIsEditing] = useState(false);
   const [isReorderModalOpen, setIsReorderModalOpen] = useState(false);
@@ -419,6 +422,30 @@ const VersionManagement = () => {
     setIsReorderModalOpen(true);
   };
 
+  // Handle reset what's new
+  const handleResetWhatsNew = async () => {
+    try {
+      setIsResetting(true);
+      const result = await resetWhatsNew();
+      if (result) {
+        message.success("What's New reset successfully");
+        // Reload versions after reset
+        const versions = await getAllVersions();
+        if (versions) {
+          setData(versions);
+          setFilteredData(versions);
+        }
+      } else {
+        message.error("Failed to reset What's New");
+      }
+    } catch (error) {
+      console.error("Error resetting What's New:", error);
+      message.error("Failed to reset What's New");
+    } finally {
+      setIsResetting(false);
+    }
+  };
+
   // Handle drag end in modal
   const handleModalDragEnd = (event) => {
     const { active, over } = event;
@@ -495,19 +522,21 @@ const VersionManagement = () => {
 
   return (
     <div>
-      {isLoading && (
-        <img
-          className="loader-container"
-          src="./img/purple-spinner.gif"
-          alt="Loading..."
-        />
-      )}
+      {isLoading && <LoadingSpinner message="Loading versions..." />}
       {!isLoading && (
         <div className="bg-gray-100 flex flex-col items-center justify-center">
-          <div className="bg-white rounded-lg shadow-lg p-8 m-4 w-full max-w-[calc(100vw-32px)] h-[calc(100vh-100px)] flex flex-col">
+          <div className="bg-white rounded-lg shadow-lg p-8 m-6 w-full max-w-[calc(100vw-32px)] h-[calc(100vh-100px)] flex flex-col">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-xl font-semibold">Version Management</h2>
               <div className="flex gap-2">
+                <Button
+                  type="default"
+                  onClick={handleResetWhatsNew}
+                  loading={isResetting}
+                  className="border-red-500 text-red-600 hover:border-red-600"
+                >
+                  {isResetting ? "Resetting..." : "Reset What's New"}
+                </Button>
                 <Button
                   type="default"
                   icon={<BarsOutlined />}

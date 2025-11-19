@@ -16,6 +16,7 @@ const { Search } = Input;
 const { Option } = Select;
 import { ExcelToJson } from "../utils/ExcelReader";
 import "../App.css";
+import LoadingSpinner from "../components/LoadingSpinner.jsx";
 import { getDataByEmail, updateFreeTrialStatus } from "../api/Devices";
 import dayjs from "dayjs";
 
@@ -213,13 +214,7 @@ const Management = () => {
 
   return (
     <div>
-      {isLoading && (
-        <img
-          className="loader-container"
-          src="./img/purple-spinner.gif"
-          alt="Loading..."
-        />
-      )}
+      {isLoading && <LoadingSpinner message="Loading data..." />}
       {!isLoading && (
         <div className=" bg-gray-100 flex flex-col items-center justify-center ">
           <div className="bg-white rounded-lg shadow-lg p-8 m-4 w-full max-w-[calc(100vw-32px)] h-[calc(100vh-100px)] flex flex-col">

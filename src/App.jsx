@@ -12,7 +12,8 @@ import {
   Navigate,
   useLocation,
 } from "react-router-dom";
-import Navbar from "./components/Navbar.jsx";
+import Sidebar from "./components/Sidebar.jsx";
+import LoadingSpinner from "./components/LoadingSpinner.jsx";
 import ProtectedRoute from "./ProtectedRoute";
 
 // Lazy load page components for better performance
@@ -24,25 +25,41 @@ const Contact = lazy(() => import("./pages/Contact.jsx"));
 const Management = lazy(() => import("./pages/Management.jsx"));
 const DeviceStatusReport = lazy(() => import("./pages/DeviceStatusReport.jsx"));
 const VersionManagement = lazy(() => import("./pages/VersionManagement.jsx"));
-
-// Loading component for Suspense fallback
-const LoadingSpinner = () => (
-  <div className="loading-container">
-    <div className="loading-spinner"></div>
-    <p>Loading...</p>
-  </div>
+const MessageBroadcasting = lazy(() =>
+  import("./pages/MessageBroadcasting.jsx")
 );
 
-// Layout component that conditionally renders the Navbar
-const Layout = ({ isAuthenticated, setIsAuthenticated }) => {
+// Layout component that conditionally renders the Sidebar
+const Layout = ({
+  isAuthenticated,
+  setIsAuthenticated,
+  sidebarCollapsed,
+  setSidebarCollapsed,
+  children,
+}) => {
   const location = useLocation();
   const isLoginPage = location.pathname === "/login";
 
   return (
     <>
       {isAuthenticated && !isLoginPage && (
-        <Navbar setIsAuthenticated={setIsAuthenticated} />
+        <Sidebar
+          setIsAuthenticated={setIsAuthenticated}
+          collapsed={sidebarCollapsed}
+          setCollapsed={setSidebarCollapsed}
+        />
       )}
+      <div
+        className={`transition-all duration-300 ${
+          isAuthenticated && !isLoginPage
+            ? sidebarCollapsed
+              ? "ml-16"
+              : "ml-64"
+            : ""
+        }`}
+      >
+        {children}
+      </div>
     </>
   );
 };
@@ -50,6 +67,7 @@ const Layout = ({ isAuthenticated, setIsAuthenticated }) => {
 const App = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   useEffect(() => {
     // Register service worker for PWA functionality
@@ -110,87 +128,100 @@ const App = () => {
       <Layout
         isAuthenticated={isAuthenticated}
         setIsAuthenticated={setIsAuthenticated}
-      />
-      <Suspense fallback={<LoadingSpinner />}>
-        <Routes>
-          <Route
-            path="/login"
-            element={<Login setIsAuthenticated={setIsAuthenticated} />}
-          />
-          <Route path="/" element={<Navigate to="/login" replace />} />
-          <Route
-            path="/home"
-            element={
-              <ProtectedRoute
-                isAuthenticated={isAuthenticated}
-                authenticationPath="/login"
-                outlet={<Home />}
-              />
-            }
-          />
-          <Route
-            path="/management"
-            element={
-              <ProtectedRoute
-                isAuthenticated={isAuthenticated}
-                authenticationPath="/login"
-                outlet={<Management />}
-              />
-            }
-          />
-          <Route
-            path="/device-status-report"
-            element={
-              <ProtectedRoute
-                isAuthenticated={isAuthenticated}
-                authenticationPath="/login"
-                outlet={<DeviceStatusReport />}
-              />
-            }
-          />
-          <Route
-            path="/about"
-            element={
-              <ProtectedRoute
-                isAuthenticated={isAuthenticated}
-                authenticationPath="/login"
-                outlet={<About />}
-              />
-            }
-          />
-          <Route
-            path="/services"
-            element={
-              <ProtectedRoute
-                isAuthenticated={isAuthenticated}
-                authenticationPath="/login"
-                outlet={<Services />}
-              />
-            }
-          />
-          <Route
-            path="/contact"
-            element={
-              <ProtectedRoute
-                isAuthenticated={isAuthenticated}
-                authenticationPath="/login"
-                outlet={<Contact />}
-              />
-            }
-          />
-          <Route
-            path="/version-management"
-            element={
-              <ProtectedRoute
-                isAuthenticated={isAuthenticated}
-                authenticationPath="/login"
-                outlet={<VersionManagement />}
-              />
-            }
-          />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </Suspense>
+        sidebarCollapsed={sidebarCollapsed}
+        setSidebarCollapsed={setSidebarCollapsed}
+      >
+        <Suspense fallback={<LoadingSpinner />}>
+          <Routes>
+            <Route
+              path="/login"
+              element={<Login setIsAuthenticated={setIsAuthenticated} />}
+            />
+            <Route path="/" element={<Navigate to="/login" replace />} />
+            <Route
+              path="/home"
+              element={
+                <ProtectedRoute
+                  isAuthenticated={isAuthenticated}
+                  authenticationPath="/login"
+                  outlet={<Home />}
+                />
+              }
+            />
+            <Route
+              path="/management"
+              element={
+                <ProtectedRoute
+                  isAuthenticated={isAuthenticated}
+                  authenticationPath="/login"
+                  outlet={<Management />}
+                />
+              }
+            />
+            <Route
+              path="/device-status-report"
+              element={
+                <ProtectedRoute
+                  isAuthenticated={isAuthenticated}
+                  authenticationPath="/login"
+                  outlet={<DeviceStatusReport />}
+                />
+              }
+            />
+            <Route
+              path="/about"
+              element={
+                <ProtectedRoute
+                  isAuthenticated={isAuthenticated}
+                  authenticationPath="/login"
+                  outlet={<About />}
+                />
+              }
+            />
+            <Route
+              path="/services"
+              element={
+                <ProtectedRoute
+                  isAuthenticated={isAuthenticated}
+                  authenticationPath="/login"
+                  outlet={<Services />}
+                />
+              }
+            />
+            <Route
+              path="/contact"
+              element={
+                <ProtectedRoute
+                  isAuthenticated={isAuthenticated}
+                  authenticationPath="/login"
+                  outlet={<Contact />}
+                />
+              }
+            />
+            <Route
+              path="/version-management"
+              element={
+                <ProtectedRoute
+                  isAuthenticated={isAuthenticated}
+                  authenticationPath="/login"
+                  outlet={<VersionManagement />}
+                />
+              }
+            />
+            <Route
+              path="/message-broadcasting"
+              element={
+                <ProtectedRoute
+                  isAuthenticated={isAuthenticated}
+                  authenticationPath="/login"
+                  outlet={<MessageBroadcasting />}
+                />
+              }
+            />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </Suspense>
+      </Layout>
     </Router>
   );
 };
