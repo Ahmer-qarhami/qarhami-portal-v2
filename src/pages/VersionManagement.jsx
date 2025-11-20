@@ -12,6 +12,7 @@ import {
   Switch,
   Checkbox,
   Modal,
+  Skeleton,
 } from "antd";
 import { EditOutlined, BarsOutlined } from "@ant-design/icons";
 import {
@@ -96,6 +97,7 @@ const VersionManagement = () => {
     index: 0,
   });
   const [isLoading, setIsLoading] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
   const [expandPanel, setExpandPanel] = useState([]);
@@ -497,7 +499,7 @@ const VersionManagement = () => {
     console.log("VersionManagement useEffect triggered - loading versions");
     const loadVersions = async () => {
       try {
-        setIsLoading(true);
+        setInitialLoading(true);
         console.log("Calling getAllVersions API...");
         const result = await getAllVersions();
         console.log("getAllVersions result:", result);
@@ -512,8 +514,8 @@ const VersionManagement = () => {
         console.error("Error loading versions:", error);
         message.error("Failed to load versions");
       } finally {
-        setIsLoading(false);
-        console.log("Loading complete, isLoading set to false");
+        setInitialLoading(false);
+        console.log("Loading complete, initialLoading set to false");
       }
     };
 
@@ -522,8 +524,13 @@ const VersionManagement = () => {
 
   return (
     <div>
-      {isLoading && <LoadingSpinner message="Loading versions..." />}
-      {!isLoading && (
+      {initialLoading ? (
+        <div className="bg-gray-100 flex flex-col items-center justify-center">
+          <div className="bg-white rounded-lg shadow-lg p-8 m-6 w-full max-w-[calc(100vw-32px)] h-[calc(100vh-100px)] flex flex-col">
+            <Skeleton active />
+          </div>
+        </div>
+      ) : (
         <div className="bg-gray-100 flex flex-col items-center justify-center">
           <div className="bg-white rounded-lg shadow-lg p-8 m-6 w-full max-w-[calc(100vw-32px)] h-[calc(100vh-100px)] flex flex-col">
             <div className="flex justify-between items-center mb-4">

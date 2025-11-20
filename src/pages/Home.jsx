@@ -10,6 +10,7 @@ import {
   message,
   Modal,
   Select,
+  Skeleton,
 } from "antd";
 const { Search } = Input;
 const { Option } = Select;
@@ -29,6 +30,7 @@ const Home = () => {
   const [duplicateData, setDuplicateData] = useState([]);
   const [formData, setFormData] = useState({});
   const [isLoading, setIsLoading] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
   const formRef = React.createRef();
 
   const [isModalVisible, setIsModalVisible] = useState(false);
@@ -237,22 +239,29 @@ const Home = () => {
 
   //useEffect for page load
   useEffect(() => {
-    getAllDevices().then((res) => {
-      const newData = res?.map((d) => {
-        return {
-          ...d,
-          key: d.deviceSerial,
-        };
-      });
-      setData(newData);
-      setFilteredData(newData);
-      setFormData({
-        deviceSerial: "",
-        imei: "",
-        iccid: "",
-        status: "",
-      });
-    });
+    const fetchData = async () => {
+      setInitialLoading(true);
+      try {
+        const res = await getAllDevices();
+        const newData = res?.map((d) => {
+          return {
+            ...d,
+            key: d.deviceSerial,
+          };
+        });
+        setData(newData);
+        setFilteredData(newData);
+        setFormData({
+          deviceSerial: "",
+          imei: "",
+          iccid: "",
+          status: "",
+        });
+      } finally {
+        setInitialLoading(false);
+      }
+    };
+    fetchData();
   }, []);
 
   return (
@@ -369,13 +378,17 @@ const Home = () => {
                 placeholder="input search text"
                 onSearch={(value) => onFilterData(value)}
               />
-              <Table
-                size="small"
-                dataSource={filteredData}
-                columns={columns}
-                pagination={false}
-                scroll={{ y: 350 }}
-              />
+              {initialLoading ? (
+                <Skeleton active />
+              ) : (
+                <Table
+                  size="small"
+                  dataSource={filteredData}
+                  columns={columns}
+                  pagination={false}
+                  scroll={{ y: 350 }}
+                />
+              )}
 
               {/* <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-indigo-50 sticky top-0 z-10">

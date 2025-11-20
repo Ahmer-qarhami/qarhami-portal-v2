@@ -28,6 +28,7 @@ const VersionManagement = lazy(() => import("./pages/VersionManagement.jsx"));
 const MessageBroadcasting = lazy(() =>
   import("./pages/MessageBroadcasting.jsx")
 );
+const Announcement = lazy(() => import("./pages/Announcement.jsx"));
 
 // Layout component that conditionally renders the Sidebar
 const Layout = ({
@@ -215,6 +216,16 @@ const App = () => {
                   isAuthenticated={isAuthenticated}
                   authenticationPath="/login"
                   outlet={<MessageBroadcasting />}
+                />
+              }
+            />
+            <Route
+              path="/announcement"
+              element={
+                <ProtectedRoute
+                  isAuthenticated={isAuthenticated}
+                  authenticationPath="/login"
+                  outlet={<Announcement />}
                 />
               }
             />

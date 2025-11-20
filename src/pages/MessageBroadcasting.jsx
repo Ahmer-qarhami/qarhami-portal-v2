@@ -1,5 +1,15 @@
 import React, { useState, useEffect } from "react";
-import { Form, Input, Button, message, Card, Row, Col, Select } from "antd";
+import {
+  Form,
+  Input,
+  Button,
+  message,
+  Card,
+  Row,
+  Col,
+  Select,
+  Skeleton,
+} from "antd";
 import { Send, Users, MessageSquare, CheckCircle, XCircle } from "lucide-react";
 import {
   broadcastSmsViaTwilio,
@@ -91,64 +101,71 @@ const MessageBroadcasting = () => {
               }
               className="shadow-sm"
             >
-              <Form form={form} layout="vertical" onFinish={handleBroadcast}>
-                <Form.Item
-                  label={
-                    <div className="flex items-center">
-                      <Users className="w-4 h-4 mr-2 text-indigo-600" />
-                      Select Recipients (Optional - leave empty for broadcast to
-                      all)
-                    </div>
-                  }
-                  name="recipients"
-                >
-                  <Select
-                    mode="multiple"
-                    placeholder="Select specific users to send SMS to"
-                    loading={loadingUsers}
-                    allowClear
-                    style={{ width: "100%" }}
-                    optionFilterProp="children"
+              {loadingUsers ? (
+                <Skeleton active />
+              ) : (
+                <Form form={form} layout="vertical" onFinish={handleBroadcast}>
+                  <Form.Item
+                    label={
+                      <div className="flex items-center">
+                        <Users className="w-4 h-4 mr-2 text-indigo-600" />
+                        Select Recipients (Optional - leave empty for broadcast
+                        to all)
+                      </div>
+                    }
+                    name="recipients"
                   >
-                    {Array.isArray(users) &&
-                      users.map((user) => (
-                        <Select.Option
-                          key={user.userId || user.phoneNumber}
-                          value={user.phoneNumber}
-                        >
-                          {user.name} ({user.phoneNumber})
-                        </Select.Option>
-                      ))}
-                  </Select>
-                </Form.Item>
+                    <Select
+                      mode="multiple"
+                      placeholder="Select specific users to send SMS to"
+                      loading={loadingUsers}
+                      allowClear
+                      style={{ width: "100%" }}
+                      optionFilterProp="children"
+                    >
+                      {Array.isArray(users) &&
+                        users.map((user) => (
+                          <Select.Option
+                            key={user.userId || user.phoneNumber}
+                            value={user.phoneNumber}
+                          >
+                            {user.name} ({user.phoneNumber})
+                          </Select.Option>
+                        ))}
+                    </Select>
+                  </Form.Item>
 
-                <Form.Item
-                  label="Message Content"
-                  name="content"
-                  rules={[
-                    { required: true, message: "Please enter message content" },
-                  ]}
-                >
-                  <TextArea
-                    rows={6}
-                    placeholder="Enter your broadcast message..."
-                    showCount
-                    maxLength={500}
-                  />
-                </Form.Item>
-
-                <Form.Item>
-                  <Button
-                    type="primary"
-                    htmlType="submit"
-                    loading={isLoading}
-                    className="bg-indigo-600 hover:bg-indigo-700 w-full"
-                    size="large"
+                  <Form.Item
+                    label="Message Content"
+                    name="content"
+                    rules={[
+                      {
+                        required: true,
+                        message: "Please enter message content",
+                      },
+                    ]}
                   >
-                    {isLoading ? "Broadcasting..." : "Send Broadcast"}
-                  </Button>
-                </Form.Item>
-              </Form>
+                    <TextArea
+                      rows={6}
+                      placeholder="Enter your broadcast message..."
+                      showCount
+                      maxLength={500}
+                    />
+                  </Form.Item>
+
+                  <Form.Item>
+                    <Button
+                      type="primary"
+                      htmlType="submit"
+                      loading={isLoading}
+                      className="bg-indigo-600 hover:bg-indigo-700 w-full"
+                      size="large"
+                    >
+                      {isLoading ? "Broadcasting..." : "Send Broadcast"}
+                    </Button>
+                  </Form.Item>
+                </Form>
+              )}
             </Card>
           </Col>
         </Row>
