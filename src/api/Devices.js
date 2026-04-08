@@ -81,6 +81,36 @@ const updateFreeTrialStatus = async (body) => {
     });
 };
 
+const cancelSubscription = async (body) => {
+  let token = getToken();
+  return await axios
+    .post(`${API_URL}/stripe/cancel-subscription`, body, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    })
+    .then((res) => res?.data)
+    .catch((err) => {
+      console.log(err);
+      throw err;
+    });
+};
+
+const undoCancelSubscription = async (body) => {
+  let token = getToken();
+  return await axios
+    .post(`${API_URL}/stripe/undo-cancel-subscription`, body, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    })
+    .then((res) => res?.data)
+    .catch((err) => {
+      console.log(err);
+      throw err;
+    });
+};
+
 const getAllActiveDevices = async () => {
   let token = getToken();
   return await axios
@@ -416,6 +446,8 @@ export {
   assignEmailToDevices,
   getDataByEmail,
   updateFreeTrialStatus,
+  cancelSubscription,
+  undoCancelSubscription,
   getAllActiveDevices,
   createVersion,
   updateVersion,
