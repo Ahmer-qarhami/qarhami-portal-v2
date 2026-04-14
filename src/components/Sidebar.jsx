@@ -5,6 +5,7 @@ import {
   Settings,
   FileText,
   Code,
+  Scale,
   LogOut,
   Menu,
   X,
@@ -29,6 +30,11 @@ const Sidebar = ({ setIsAuthenticated, collapsed, setCollapsed }) => {
       to: "/device-status-report",
       label: "Device Status Report",
       icon: FileText,
+    },
+    {
+      to: "/reconciliation",
+      label: "Stripe Reconciliation",
+      icon: Scale,
     },
     { to: "/version-management", label: "Version Management", icon: Code },
     {

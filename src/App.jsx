@@ -25,6 +25,7 @@ const Services = lazy(() => import("./pages/Services.jsx"));
 const Contact = lazy(() => import("./pages/Contact.jsx"));
 const Management = lazy(() => import("./pages/Management.jsx"));
 const DeviceStatusReport = lazy(() => import("./pages/DeviceStatusReport.jsx"));
+const Reconciliation = lazy(() => import("./pages/Reconciliation.jsx"));
 const VersionManagement = lazy(() => import("./pages/VersionManagement.jsx"));
 const MessageBroadcasting = lazy(() =>
   import("./pages/MessageBroadcasting.jsx")
@@ -335,6 +336,16 @@ const App = () => {
                   isAuthenticated={isAuthenticated}
                   authenticationPath="/login"
                   outlet={<DeviceStatusReport />}
+                />
+              }
+            />
+            <Route
+              path="/reconciliation"
+              element={
+                <ProtectedRoute
+                  isAuthenticated={isAuthenticated}
+                  authenticationPath="/login"
+                  outlet={<Reconciliation />}
                 />
               }
             />
