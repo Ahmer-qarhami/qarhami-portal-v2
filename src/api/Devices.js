@@ -49,6 +49,32 @@ const assignEmailToDevices = async (data) => {
     });
 };
 
+const deactivateDeviceSIM = async (deviceSerials) => {
+  let token = getToken();
+
+  if (!token) {
+    throw new Error("Unauthorized: missing JWT token");
+  }
+
+  return await axios
+    .post(
+      `${API_URL}/device-master/deactivateDeviceSIM`,
+      { deviceSerial: deviceSerials },
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    )
+    .then((res) => {
+      return res?.data;
+    })
+    .catch((err) => {
+      console.log(err);
+      throw err;
+    });
+};
+
 const getDataByEmail = async (email) => {
   let token = getToken();
   return await axios
@@ -444,6 +470,7 @@ export {
   uploadData,
   getAllDevices,
   assignEmailToDevices,
+  deactivateDeviceSIM,
   getDataByEmail,
   updateFreeTrialStatus,
   cancelSubscription,

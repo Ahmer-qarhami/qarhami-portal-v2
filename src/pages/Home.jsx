@@ -14,6 +14,7 @@ import {
 } from "antd";
 const { Search } = Input;
 const { Option } = Select;
+const { confirm } = Modal;
 import { ExcelToJson } from "../utils/ExcelReader";
 import "../App.css";
 import LoadingSpinner from "../components/LoadingSpinner.jsx";
@@ -21,6 +22,7 @@ import {
   uploadData,
   getAllDevices,
   assignEmailToDevices,
+  deactivateDeviceSIM,
 } from "../api/Devices";
 
 const Home = () => {
@@ -82,6 +84,28 @@ const Home = () => {
       dataIndex: "status",
       key: "status",
       className: "text-xs md:text-md",
+    },
+    {
+      title: "Action",
+      key: "action",
+      className: "text-xs md:text-md",
+      render: (_, record) => {
+        const isDeactivated =
+          record?.simStatus === "DEACTIVATED" ||
+          record?.status === "DEACTIVATED";
+
+        if (isDeactivated) return null;
+
+        return (
+          <Button
+            size="small"
+            danger
+            onClick={() => handleDeactivateDeviceSIM(record?.deviceSerial)}
+          >
+            Deactivate
+          </Button>
+        );
+      },
     },
   ];
 
@@ -168,6 +192,66 @@ const Home = () => {
       `Assigned ${selectedDevices.length} devices to ${assignEmail}`
     );
     handleCancel();
+  };
+
+  const handleDeactivateDeviceSIM = async (serialFromRow) => {
+    const selectedSerial = serialFromRow || formData?.deviceSerial;
+
+    if (!selectedSerial) {
+      message.error("Please select a device serial first");
+      return;
+    }
+
+    confirm({
+      title: "Are you sure?",
+      content: `Do you want to deactivate SIM for device ${selectedSerial}?`,
+      okText: "Yes, Deactivate",
+      cancelText: "Cancel",
+      okType: "danger",
+      onOk: async () => {
+        try {
+          setIsLoading(true);
+          await deactivateDeviceSIM([selectedSerial]);
+          message.success(`SIM deactivation requested for ${selectedSerial}`);
+
+          const markAsDeactivated = (items = []) =>
+            items.map((item) =>
+              item?.deviceSerial === selectedSerial
+                ? { ...item, status: "DEACTIVATED", simStatus: "DEACTIVATED" }
+                : item
+            );
+
+          // Update UI immediately so status is reflected in table right away.
+          setData((prev) => markAsDeactivated(prev));
+          setFilteredData((prev) => markAsDeactivated(prev));
+          setFormData((prev) =>
+            prev?.deviceSerial === selectedSerial
+              ? { ...prev, status: "DEACTIVATED", simStatus: "DEACTIVATED" }
+              : prev
+          );
+
+          const res = await getAllDevices();
+          let refreshedData = res?.map((d) => ({
+            ...d,
+            key: d.deviceSerial,
+          }));
+          refreshedData = markAsDeactivated(refreshedData || []);
+          setData(refreshedData);
+          setFilteredData(refreshedData);
+        } catch (error) {
+          if (
+            error?.response?.status === 401 ||
+            error?.message?.includes("missing JWT token")
+          ) {
+            message.error("Unauthorized. Please login again.");
+          } else {
+            message.error("Failed to deactivate device SIM");
+          }
+        } finally {
+          setIsLoading(false);
+        }
+      },
+    });
   };
 
   const handleFileUpload = async (e) => {
@@ -330,6 +414,17 @@ const Home = () => {
                       >
                         Assign Devices to Email
                       </Button>
+                      {formData?.simStatus !== "DEACTIVATED" &&
+                        formData?.status !== "DEACTIVATED" && (
+                          <Button
+                            type="primary"
+                            danger
+                            onClick={handleDeactivateDeviceSIM}
+                            className="mr-3"
+                          >
+                            Deactivate Device SIM
+                          </Button>
+                        )}
                       <label htmlFor="uploadFile">Upload Excel File</label>
                       <input
                         className="ml-3"
