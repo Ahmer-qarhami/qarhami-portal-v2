@@ -38,6 +38,8 @@ const Home = () => {
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [selectedDevices, setSelectedDevices] = useState([]);
   const [assignEmail, setAssignEmail] = useState("");
+  const [searchText, setSearchText] = useState("");
+  const [statusFilter, setStatusFilter] = useState("ALL");
 
   //table columns
   const columns = [
@@ -121,26 +123,38 @@ const Home = () => {
     }
   };
 
-  const onFilterData = (text) => {
-    text = text.toLowerCase();
-    if (text == "") {
-      setFilteredData(data);
-    } else {
-      const newData = data?.filter((d) => {
-        return (
-          d?.deviceSerial?.toLowerCase().includes(text) ||
-          d?.imei?.toLowerCase().includes(text) ||
-          d?.iccid?.toLowerCase().includes(text) ||
-          d?.status?.toLowerCase().includes(text) ||
-          d?.email?.toLowerCase().includes(text) ||
-          d?.fullName?.toLowerCase().includes(text) ||
-          d?.vin?.toLowerCase().includes(text) ||
-          d?.carName?.toLowerCase().includes(text)
-        );
-      });
+  const applyFilters = (text, selectedStatus) => {
+    const normalizedText = (text || "").toLowerCase();
+    const filtered = data?.filter((d) => {
+      const matchesSearch =
+        normalizedText === "" ||
+        d?.deviceSerial?.toLowerCase().includes(normalizedText) ||
+        d?.imei?.toLowerCase().includes(normalizedText) ||
+        d?.iccid?.toLowerCase().includes(normalizedText) ||
+        d?.status?.toLowerCase().includes(normalizedText) ||
+        d?.email?.toLowerCase().includes(normalizedText) ||
+        d?.fullName?.toLowerCase().includes(normalizedText) ||
+        d?.vin?.toLowerCase().includes(normalizedText) ||
+        d?.carName?.toLowerCase().includes(normalizedText);
 
-      setFilteredData(newData);
-    }
+      const deviceStatus = d?.simStatus || d?.status;
+      const matchesStatus =
+        selectedStatus === "ALL" || deviceStatus === selectedStatus;
+
+      return matchesSearch && matchesStatus;
+    });
+
+    setFilteredData(filtered || []);
+  };
+
+  const onFilterData = (text) => {
+    setSearchText(text || "");
+    applyFilters(text || "", statusFilter);
+  };
+
+  const onStatusFilterChange = (value) => {
+    setStatusFilter(value);
+    applyFilters(searchText, value);
   };
 
   const onFinish = (values) => {};
@@ -348,13 +362,30 @@ const Home = () => {
     fetchData();
   }, []);
 
+  useEffect(() => {
+    applyFilters(searchText, statusFilter);
+  }, [data]);
+
+  const totalDeviceCount = data?.length || 0;
+  const visibleDeviceCount = filteredData?.length || 0;
+  const availableStatuses = [
+    "ALL",
+    ...new Set(
+      (data || [])
+        .map((d) => d?.simStatus || d?.status)
+        .filter((status) => !!status)
+    ),
+  ];
+
   return (
     <div>
       {isLoading && <LoadingSpinner message="Loading devices..." />}
       {!isLoading && (
         <div className=" bg-gray-100 flex flex-col items-center justify-center ">
           <div className="bg-white rounded-lg shadow-lg p-8 m-4 w-full max-w-[calc(100vw-32px)] h-[calc(100vh-100px)] flex flex-col">
-            <h2 className="text-xl font-semibold mb-4">Device Table</h2>
+            <h2 className="text-xl font-semibold mb-4">
+              Device Table ({visibleDeviceCount}/{totalDeviceCount})
+            </h2>
             <Collapse
               className="bg-indigo-50 mb-3 sm:min-h-[30px] overflow-auto"
               size="small"
@@ -468,11 +499,25 @@ const Home = () => {
             {/* Table Container - Ensure it grows and doesn't overflow */}
             <div className="flex-grow min-h-0 overflow-auto">
               <hr className="border-indigo-200" />
-              <Search
-                className="mt-3"
-                placeholder="input search text"
-                onSearch={(value) => onFilterData(value)}
-              />
+              <div className="mt-3 mb-3 flex gap-3">
+                <Search
+                  placeholder="input search text"
+                  onSearch={(value) => onFilterData(value)}
+                  allowClear
+                  onChange={(e) => onFilterData(e.target.value)}
+                />
+                <Select
+                  value={statusFilter}
+                  onChange={onStatusFilterChange}
+                  style={{ minWidth: 220 }}
+                >
+                  {availableStatuses.map((status) => (
+                    <Option key={status} value={status}>
+                      {status}
+                    </Option>
+                  ))}
+                </Select>
+              </div>
               {initialLoading ? (
                 <Skeleton active />
               ) : (
