@@ -49,6 +49,7 @@ const Home = () => {
       key: "deviceSerial",
       clickable: true,
       className: "link-column text-xs md:text-md",
+      sorter: (a, b) => (a.deviceSerial || "").localeCompare(b.deviceSerial || ""),
 
       render: (text, record) => {
         return (
@@ -69,23 +70,33 @@ const Home = () => {
       },
     },
     {
+      title: "Email",
+      dataIndex: "email",
+      key: "email",
+      className: "text-xs md:text-md",
+      sorter: (a, b) => (a.email || "").localeCompare(b.email || ""),
+    },
+    {
       title: "IMEI",
       dataIndex: "imei",
       key: "imei",
       clickable: true,
       className: "text-xs md:text-md",
+      sorter: (a, b) => (a.imei || "").localeCompare(b.imei || ""),
     },
     {
       title: "ICCID",
       dataIndex: "iccid",
       key: "iccid",
       className: "text-xs md:text-md",
+      sorter: (a, b) => (a.iccid || "").localeCompare(b.iccid || ""),
     },
     {
       title: "Status",
       dataIndex: "status",
       key: "status",
       className: "text-xs md:text-md",
+      sorter: (a, b) => (a.status || "").localeCompare(b.status || ""),
     },
     {
       title: "Action",

@@ -133,6 +133,7 @@ const Management = () => {
       key: "deviceSerial",
       clickable: true,
       className: "link-column text-xs md:text-md",
+      sorter: (a, b) => (a.deviceSerial || "").localeCompare(b.deviceSerial || ""),
 
       render: (text, record) => {
         return (
@@ -169,12 +170,14 @@ const Management = () => {
       key: "carName",
       clickable: true,
       className: "text-xs md:text-md",
+      sorter: (a, b) => (a.carName || "").localeCompare(b.carName || ""),
     },
     {
       title: "Status",
       dataIndex: "subscriptionStatus",
       key: "subscriptionStatus",
       className: "text-xs md:text-md",
+      sorter: (a, b) => (a.subscriptionStatus || "").localeCompare(b.subscriptionStatus || ""),
     },
     {
       title: "Free Trial Expiry",
@@ -182,6 +185,7 @@ const Management = () => {
       key: "freeTrialEndDate",
       className: "text-xs md:text-md",
       render: (text) => formatDate(text),
+      sorter: (a, b) => (a.freeTrialEndDate || 0) - (b.freeTrialEndDate || 0),
     },
     {
       title: "Billing Date",
@@ -189,6 +193,7 @@ const Management = () => {
       key: "billingDate",
       className: "text-xs md:text-md",
       render: (text) => formatDate(text),
+      sorter: (a, b) => (a.billingDate || 0) - (b.billingDate || 0),
     },
     {
       title: "Actions",

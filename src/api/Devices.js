@@ -20,7 +20,7 @@ const uploadData = async (data) => {
 const getAllDevices = async () => {
   let token = getToken();
   return await axios
-    .get(`${API_URL}/device-master/getAllData`, {
+    .get(`${API_URL}/device-master/getActiveDevices`, {
       headers: {
         Authorization: `Bearer ${token}`,
       },

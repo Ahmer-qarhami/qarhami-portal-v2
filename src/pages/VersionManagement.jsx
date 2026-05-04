@@ -14,6 +14,7 @@ import {
   Modal,
   Skeleton,
 } from "antd";
+const { Search } = Input;
 import { EditOutlined, BarsOutlined } from "@ant-design/icons";
 import {
   DndContext,
@@ -80,6 +81,7 @@ const DraggableRow = ({ children, ...props }) => {
 const VersionManagement = () => {
   const [data, setData] = useState([]);
   const [filteredData, setFilteredData] = useState([]);
+  const [searchText, setSearchText] = useState("");
   const [formData, setFormData] = useState({
     id: "",
     serialNo: "",
@@ -141,6 +143,7 @@ const VersionManagement = () => {
       dataIndex: "version",
       key: "version",
       className: "text-xs md:text-md",
+      sorter: (a, b) => (a.version || "").localeCompare(b.version || ""),
     },
     {
       title: "Release Date",
@@ -148,12 +151,14 @@ const VersionManagement = () => {
       key: "releaseDate",
       className: "text-xs md:text-md",
       render: (text) => (text ? dayjs(text).format("MM/DD/YYYY") : "-"),
+      sorter: (a, b) => (a.releaseDate || 0) - (b.releaseDate || 0),
     },
     {
       title: "Heading",
       dataIndex: "heading",
       key: "heading",
       className: "text-xs md:text-md",
+      sorter: (a, b) => (a.heading || "").localeCompare(b.heading || ""),
     },
     {
       title: "Description",
@@ -175,6 +180,7 @@ const VersionManagement = () => {
       key: "hasImageLink",
       className: "text-xs md:text-md",
       render: (text) => (text ? "Yes" : "No"),
+      sorter: (a, b) => (a.hasImageLink === b.hasImageLink ? 0 : a.hasImageLink ? -1 : 1),
     },
     {
       title: "App Link",
@@ -189,6 +195,7 @@ const VersionManagement = () => {
       key: "hasAppLink",
       className: "text-xs md:text-md",
       render: (text) => (text ? "Yes" : "No"),
+      sorter: (a, b) => (a.hasAppLink === b.hasAppLink ? 0 : a.hasAppLink ? -1 : 1),
     },
     {
       title: "External Link",
@@ -203,6 +210,7 @@ const VersionManagement = () => {
       key: "hasExternalLink",
       className: "text-xs md:text-md",
       render: (text) => (text ? "Yes" : "No"),
+      sorter: (a, b) => (a.hasExternalLink === b.hasExternalLink ? 0 : a.hasExternalLink ? -1 : 1),
     },
     {
       title: "Is Active",
@@ -210,6 +218,7 @@ const VersionManagement = () => {
       key: "isActive",
       className: "text-xs md:text-md",
       render: (text) => (text ? "Yes" : "No"),
+      sorter: (a, b) => (a.isActive === b.isActive ? 0 : a.isActive ? -1 : 1),
     },
     {
       title: "Actions",
@@ -235,6 +244,25 @@ const VersionManagement = () => {
       setExpandPanel([]);
     } else {
       setExpandPanel([1]);
+    }
+  };
+
+  // Search function
+  const onFilterData = (text) => {
+    setSearchText(text);
+    const normalizedText = (text || "").toLowerCase();
+    if (normalizedText === "") {
+      setFilteredData(data);
+    } else {
+      const filtered = data?.filter((d) => {
+        return (
+          d?.version?.toLowerCase().includes(normalizedText) ||
+          d?.heading?.toLowerCase().includes(normalizedText) ||
+          d?.description?.toLowerCase().includes(normalizedText) ||
+          (d?.releaseDate && formatDate(d.releaseDate).toLowerCase().includes(normalizedText))
+        );
+      });
+      setFilteredData(filtered);
     }
   };
 
@@ -334,6 +362,7 @@ const VersionManagement = () => {
       form.resetFields();
       setExpandPanel([]);
       setIsEditing(false);
+      setSearchText("");
       setFormData({
         id: "",
         serialNo: "",
@@ -817,6 +846,14 @@ const VersionManagement = () => {
             {/* Table Container */}
             <div className="flex-grow min-h-0 overflow-auto">
               <hr className="border-indigo-200" />
+              <Search
+                className="mt-3 mb-3"
+                placeholder="Search versions..."
+                onSearch={(value) => onFilterData(value)}
+                onChange={(e) => onFilterData(e.target.value)}
+                allowClear
+                value={searchText}
+              />
               <Table
                 size="small"
                 dataSource={filteredData}
