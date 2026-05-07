@@ -1,10 +1,12 @@
 import React, { useMemo, useRef, useState } from "react";
 import { Button, Input, Select, Table, message } from "antd";
 import { ExcelToJson } from "../utils/ExcelReader";
-import { getAllDevices } from "../api/Devices";
+import { getAllActiveDevices } from "../api/Devices";
 import LoadingSpinner from "../components/LoadingSpinner.jsx";
 
 const { Option } = Select;
+
+const SUBSCRIBED_RECON_STATUSES = new Set(["SUBSCRIBED", "SUBSCRIBED_ACK"]);
 
 const parseExpectedQty = (value) => {
   if (value === null || value === undefined) return 0;
@@ -14,7 +16,9 @@ const parseExpectedQty = (value) => {
 };
 
 const formatCurrency = (value) => {
-  const cleaned = String(value ?? "").replace(/,/g, "").trim();
+  const cleaned = String(value ?? "")
+    .replace(/,/g, "")
+    .trim();
   const parsed = Number(cleaned);
   if (!Number.isFinite(parsed)) return value || "-";
   return new Intl.NumberFormat("en-US", {
@@ -85,14 +89,35 @@ const Reconciliation = () => {
     try {
       setIsLoading(true);
 
-      const deviceData = await getAllDevices();
-      const statusCountMap = (deviceData || []).reduce((acc, device) => {
-        const key = normalizeKey(device?.simStatus || device?.status || "");
+      const raw = await getAllActiveDevices();
+      const list = Array.isArray(raw) ? raw : [];
+      // Qarhami counts: only vehicles Stripe-eligible (subscribed or ack), not trial/cancelled/etc.
+      const subscribedRows = list.filter((d) =>
+        SUBSCRIBED_RECON_STATUSES.has(d?.subscriptionStatus),
+      );
+
+      // De-dupe by deviceSerial to avoid inflated counts when user vehicles
+      // contain duplicates (or multiple records resolve to the same device).
+      const deviceData = Array.from(
+        new Map(
+          subscribedRows
+            .filter((d) => d?.deviceSerial)
+            .map((d) => [String(d.deviceSerial).trim(), d]),
+        ).values(),
+      );
+
+      // //include only ftype666@gmail.com
+      // const emailData = list.filter(
+      //   (d) => d.email.toLowerCase() === "ftype666@gmail.com",
+      // );
+
+      const statusCountMap = deviceData.reduce((acc, device) => {
+        const key = normalizeKey(device?.subscriptionStatus || "");
         if (!key) return acc;
         acc[key] = (acc[key] || 0) + 1;
         return acc;
       }, {});
-      const emailCountMap = (deviceData || []).reduce((acc, device) => {
+      const emailCountMap = deviceData.reduce((acc, device) => {
         const key = normalizeKey(device?.email || "");
         if (!key) return acc;
         acc[key] = (acc[key] || 0) + 1;
@@ -123,11 +148,11 @@ const Reconciliation = () => {
           .filter((item) => item.reconcileKey);
 
         const matchedRows = parsedRows.filter(
-          (item) => item.result === "MATCHED"
+          (item) => item.result === "MATCHED",
         ).length;
         if (parsedRows.length > 0 && matchedRows === 0) {
           message.warning(
-            "No matched rows found. Please confirm key column values (email/status) match Device Master data."
+            "No matched rows found. Keys should match Qarhami data for vehicles with SUBSCRIBED or SUBSCRIBED_ACK only (email or subscription status).",
           );
         }
 
@@ -149,14 +174,15 @@ const Reconciliation = () => {
       const matchesResult =
         resultFilter === "ALL" || item.result === resultFilter;
       const matchesEmail =
-        normalizedEmail === "" || normalizeKey(item.reconcileKey).includes(normalizedEmail);
+        normalizedEmail === "" ||
+        normalizeKey(item.reconcileKey).includes(normalizedEmail);
       return matchesResult && matchesEmail;
     });
   }, [rows, resultFilter, emailFilter]);
 
   const matchedCount = rows.filter((item) => item.result === "MATCHED").length;
   const unmatchedCount = rows.filter(
-    (item) => item.result === "UNMATCHED"
+    (item) => item.result === "UNMATCHED",
   ).length;
 
   const openFilePicker = () => {
@@ -170,7 +196,9 @@ const Reconciliation = () => {
       key: "reconcileKey",
       className: "text-xs md:text-md",
       sorter: (a, b) =>
-        String(a?.reconcileKey || "").localeCompare(String(b?.reconcileKey || "")),
+        String(a?.reconcileKey || "").localeCompare(
+          String(b?.reconcileKey || ""),
+        ),
     },
     {
       title: "Stripe",
@@ -191,7 +219,8 @@ const Reconciliation = () => {
       dataIndex: "result",
       key: "result",
       className: "text-xs md:text-md",
-      sorter: (a, b) => String(a?.result || "").localeCompare(String(b?.result || "")),
+      sorter: (a, b) =>
+        String(a?.result || "").localeCompare(String(b?.result || "")),
     },
     {
       title: "Amount (USD)",
@@ -200,8 +229,16 @@ const Reconciliation = () => {
       className: "text-xs md:text-md",
       render: (value) => formatCurrency(value),
       sorter: (a, b) => {
-        const left = Number(String(a?.remarks ?? "").replace(/,/g, "").trim());
-        const right = Number(String(b?.remarks ?? "").replace(/,/g, "").trim());
+        const left = Number(
+          String(a?.remarks ?? "")
+            .replace(/,/g, "")
+            .trim(),
+        );
+        const right = Number(
+          String(b?.remarks ?? "")
+            .replace(/,/g, "")
+            .trim(),
+        );
         const normalizedLeft = Number.isFinite(left) ? left : 0;
         const normalizedRight = Number.isFinite(right) ? right : 0;
         return normalizedLeft - normalizedRight;
@@ -211,7 +248,9 @@ const Reconciliation = () => {
 
   return (
     <div className="bg-gray-100 flex flex-col items-center justify-center">
-      {isLoading && <LoadingSpinner message="Reconciling with Device Master..." />}
+      {isLoading && (
+        <LoadingSpinner message="Reconciling with Qarhami (SUBSCRIBED / SUBSCRIBED_ACK only)..." />
+      )}
       <div className="bg-white rounded-lg shadow-lg p-8 m-4 w-full max-w-[calc(100vw-32px)] h-[calc(100vh-100px)] flex flex-col">
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-xl font-semibold">Stripe Reconciliation</h2>
@@ -255,7 +294,8 @@ const Reconciliation = () => {
             Matched: <strong className="text-green-700">{matchedCount}</strong>
           </span>
           <span>
-            Unmatched: <strong className="text-red-700">{unmatchedCount}</strong>
+            Unmatched:{" "}
+            <strong className="text-red-700">{unmatchedCount}</strong>
           </span>
         </div>
 
@@ -271,8 +311,8 @@ const Reconciliation = () => {
               record.result === "MATCHED"
                 ? "bg-green-50"
                 : record.result === "UNMATCHED"
-                ? "bg-red-50"
-                : ""
+                  ? "bg-red-50"
+                  : ""
             }
           />
         </div>

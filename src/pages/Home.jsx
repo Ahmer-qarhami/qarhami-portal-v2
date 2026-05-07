@@ -23,7 +23,31 @@ import {
   getAllDevices,
   assignEmailToDevices,
   deactivateDeviceSIM,
+  reactivateDeviceSIM,
 } from "../api/Devices";
+
+/** Pure filter used for table rows; keeps behavior consistent with useEffect + handlers. */
+function filterDevices(items, text, selectedStatus) {
+  const normalizedText = (text || "").toLowerCase();
+  return (items || []).filter((d) => {
+    const matchesSearch =
+      normalizedText === "" ||
+      d?.deviceSerial?.toLowerCase().includes(normalizedText) ||
+      d?.imei?.toLowerCase().includes(normalizedText) ||
+      d?.iccid?.toLowerCase().includes(normalizedText) ||
+      d?.status?.toLowerCase().includes(normalizedText) ||
+      d?.email?.toLowerCase().includes(normalizedText) ||
+      d?.fullName?.toLowerCase().includes(normalizedText) ||
+      d?.vin?.toLowerCase().includes(normalizedText) ||
+      d?.carName?.toLowerCase().includes(normalizedText);
+
+    const deviceStatus = d?.simStatus || d?.status;
+    const matchesStatus =
+      selectedStatus === "ALL" || deviceStatus === selectedStatus;
+
+    return matchesSearch && matchesStatus;
+  });
+}
 
 const Home = () => {
   const [data, setData] = useState([]);
@@ -107,7 +131,17 @@ const Home = () => {
           record?.simStatus === "DEACTIVATED" ||
           record?.status === "DEACTIVATED";
 
-        if (isDeactivated) return null;
+        if (isDeactivated) {
+          return (
+            <Button
+              size="small"
+              type="primary"
+              onClick={() => handleReactivateDeviceSIM(record?.deviceSerial)}
+            >
+              Reactivate
+            </Button>
+          );
+        }
 
         return (
           <Button
@@ -134,38 +168,12 @@ const Home = () => {
     }
   };
 
-  const applyFilters = (text, selectedStatus) => {
-    const normalizedText = (text || "").toLowerCase();
-    const filtered = data?.filter((d) => {
-      const matchesSearch =
-        normalizedText === "" ||
-        d?.deviceSerial?.toLowerCase().includes(normalizedText) ||
-        d?.imei?.toLowerCase().includes(normalizedText) ||
-        d?.iccid?.toLowerCase().includes(normalizedText) ||
-        d?.status?.toLowerCase().includes(normalizedText) ||
-        d?.email?.toLowerCase().includes(normalizedText) ||
-        d?.fullName?.toLowerCase().includes(normalizedText) ||
-        d?.vin?.toLowerCase().includes(normalizedText) ||
-        d?.carName?.toLowerCase().includes(normalizedText);
-
-      const deviceStatus = d?.simStatus || d?.status;
-      const matchesStatus =
-        selectedStatus === "ALL" || deviceStatus === selectedStatus;
-
-      return matchesSearch && matchesStatus;
-    });
-
-    setFilteredData(filtered || []);
-  };
-
   const onFilterData = (text) => {
     setSearchText(text || "");
-    applyFilters(text || "", statusFilter);
   };
 
   const onStatusFilterChange = (value) => {
     setStatusFilter(value);
-    applyFilters(searchText, value);
   };
 
   const onFinish = (values) => {};
@@ -239,30 +247,24 @@ const Home = () => {
           await deactivateDeviceSIM([selectedSerial]);
           message.success(`SIM deactivation requested for ${selectedSerial}`);
 
-          const markAsDeactivated = (items = []) =>
-            items.map((item) =>
-              item?.deviceSerial === selectedSerial
-                ? { ...item, status: "DEACTIVATED", simStatus: "DEACTIVATED" }
-                : item
-            );
-
-          // Update UI immediately so status is reflected in table right away.
-          setData((prev) => markAsDeactivated(prev));
-          setFilteredData((prev) => markAsDeactivated(prev));
-          setFormData((prev) =>
-            prev?.deviceSerial === selectedSerial
-              ? { ...prev, status: "DEACTIVATED", simStatus: "DEACTIVATED" }
-              : prev
-          );
-
-          const res = await getAllDevices();
-          let refreshedData = res?.map((d) => ({
+          const raw = await getAllDevices();
+          const list = Array.isArray(raw) ? raw : [];
+          const refreshedData = list.map((d) => ({
             ...d,
             key: d.deviceSerial,
           }));
-          refreshedData = markAsDeactivated(refreshedData || []);
+
+          // Narrow filters (e.g. INSTALLATION_PENDING) would hide the newly deactivated row.
+          setSearchText("");
+          setStatusFilter("ALL");
           setData(refreshedData);
-          setFilteredData(refreshedData);
+          setFormData((prev) => {
+            if (prev?.deviceSerial !== selectedSerial) return prev;
+            const row = refreshedData.find(
+              (d) => d.deviceSerial === selectedSerial
+            );
+            return row ? { ...prev, ...row } : prev;
+          });
         } catch (error) {
           if (
             error?.response?.status === 401 ||
@@ -271,6 +273,60 @@ const Home = () => {
             message.error("Unauthorized. Please login again.");
           } else {
             message.error("Failed to deactivate device SIM");
+          }
+        } finally {
+          setIsLoading(false);
+        }
+      },
+    });
+  };
+
+  const handleReactivateDeviceSIM = async (serialFromRow) => {
+    const selectedSerial = serialFromRow || formData?.deviceSerial;
+
+    if (!selectedSerial) {
+      message.error("Please select a device serial first");
+      return;
+    }
+
+    confirm({
+      title: "Reactivate device?",
+      content: `Do you want to reactivate SIM for device ${selectedSerial}?`,
+      okText: "Yes, Reactivate",
+      cancelText: "Cancel",
+      onOk: async () => {
+        try {
+          setIsLoading(true);
+          await reactivateDeviceSIM([selectedSerial]);
+          message.success(`SIM reactivation requested for ${selectedSerial}`);
+
+          const raw = await getAllDevices();
+          const list = Array.isArray(raw) ? raw : [];
+          const refreshedData = list.map((d) => ({
+            ...d,
+            key: d.deviceSerial,
+          }));
+
+          // Reactivated rows leave statuses like DEACTIVATED; prior status filter would hide them
+          // and the table looked "empty" or a single row. Show the full list again.
+          setSearchText("");
+          setStatusFilter("ALL");
+          setData(refreshedData);
+          setFormData((prev) => {
+            if (prev?.deviceSerial !== selectedSerial) return prev;
+            const row = refreshedData.find(
+              (d) => d.deviceSerial === selectedSerial
+            );
+            return row ? { ...prev, ...row } : prev;
+          });
+        } catch (error) {
+          if (
+            error?.response?.status === 401 ||
+            error?.message?.includes("missing JWT token")
+          ) {
+            message.error("Unauthorized. Please login again.");
+          } else {
+            message.error("Failed to reactivate device SIM");
           }
         } finally {
           setIsLoading(false);
@@ -374,8 +430,8 @@ const Home = () => {
   }, []);
 
   useEffect(() => {
-    applyFilters(searchText, statusFilter);
-  }, [data]);
+    setFilteredData(filterDevices(data, searchText, statusFilter));
+  }, [data, searchText, statusFilter]);
 
   const totalDeviceCount = data?.length || 0;
   const visibleDeviceCount = filteredData?.length || 0;
@@ -456,17 +512,25 @@ const Home = () => {
                       >
                         Assign Devices to Email
                       </Button>
-                      {formData?.simStatus !== "DEACTIVATED" &&
-                        formData?.status !== "DEACTIVATED" && (
-                          <Button
-                            type="primary"
-                            danger
-                            onClick={handleDeactivateDeviceSIM}
-                            className="mr-3"
-                          >
-                            Deactivate Device SIM
-                          </Button>
-                        )}
+                      {formData?.simStatus === "DEACTIVATED" ||
+                      formData?.status === "DEACTIVATED" ? (
+                        <Button
+                          type="primary"
+                          onClick={() => handleReactivateDeviceSIM()}
+                          className="mr-3"
+                        >
+                          Reactivate Device SIM
+                        </Button>
+                      ) : (
+                        <Button
+                          type="primary"
+                          danger
+                          onClick={handleDeactivateDeviceSIM}
+                          className="mr-3"
+                        >
+                          Deactivate Device SIM
+                        </Button>
+                      )}
                       <label htmlFor="uploadFile">Upload Excel File</label>
                       <input
                         className="ml-3"
