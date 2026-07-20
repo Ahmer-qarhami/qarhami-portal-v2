@@ -11,6 +11,7 @@ import {
   X,
   MessageSquare,
   Megaphone,
+  Server,
 } from "lucide-react";
 
 const VERSION = import.meta.env.VITE_VERSION || "1.0.0";
@@ -43,6 +44,7 @@ const Sidebar = ({ setIsAuthenticated, collapsed, setCollapsed }) => {
       icon: MessageSquare,
     },
     { to: "/announcement", label: "Announcement", icon: Megaphone },
+    { to: "/app-info", label: "App Info", icon: Server },
   ];
 
   return (

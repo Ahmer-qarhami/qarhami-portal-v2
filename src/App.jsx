@@ -31,6 +31,7 @@ const MessageBroadcasting = lazy(() =>
   import("./pages/MessageBroadcasting.jsx")
 );
 const Announcement = lazy(() => import("./pages/Announcement.jsx"));
+const AppInfoManagement = lazy(() => import("./pages/AppInfoManagement.jsx"));
 
 const compareVersions = (a, b) => {
   if (!a || !b) return 0;
@@ -406,6 +407,16 @@ const App = () => {
                   isAuthenticated={isAuthenticated}
                   authenticationPath="/login"
                   outlet={<Announcement />}
+                />
+              }
+            />
+            <Route
+              path="/app-info"
+              element={
+                <ProtectedRoute
+                  isAuthenticated={isAuthenticated}
+                  authenticationPath="/login"
+                  outlet={<AppInfoManagement />}
                 />
               }
             />
