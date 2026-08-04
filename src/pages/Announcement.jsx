@@ -11,6 +11,7 @@ import {
   Skeleton,
 } from "antd";
 import { Megaphone, Save } from "lucide-react";
+import PageContainer from "../components/PageContainer.jsx";
 import { getAnnouncement, updateAnnouncement } from "../api/Announcement";
 
 const { TextArea } = Input;
@@ -61,86 +62,77 @@ const Announcement = () => {
   };
 
   return (
-    <div className="bg-gray-100 flex flex-col items-center justify-center">
-      <div className="bg-white rounded-lg shadow-lg p-8 m-6 w-full max-w-4xl h-[calc(100vh-100px)] flex flex-col">
-        <div className="flex items-center mb-6">
-          <Megaphone className="w-8 h-8 text-indigo-600 mr-3" />
-          <h2 className="text-2xl font-semibold text-gray-800">
-            Announcement Management
-          </h2>
-        </div>
+    <PageContainer title="Announcement Management" icon={Megaphone}>
+      <Row gutter={[16, 16]}>
+        <Col xs={24} lg={14} xl={12}>
+          <Card
+            title={
+              <div className="flex items-center">
+                <Save className="w-5 h-5 mr-2 text-indigo-600 shrink-0" />
+                Update Announcement
+              </div>
+            }
+            className="shadow-sm"
+          >
+            {loadingAnnouncement ? (
+              <Skeleton active />
+            ) : (
+              <Form form={form} layout="vertical" onFinish={handleUpdate}>
+                <Form.Item
+                  label="Announcement Content"
+                  name="content"
+                  rules={[
+                    {
+                      required: true,
+                      message: "Please enter announcement content",
+                    },
+                  ]}
+                >
+                  <TextArea
+                    rows={6}
+                    placeholder="Enter your announcement..."
+                    showCount
+                    maxLength={1000}
+                  />
+                </Form.Item>
 
-        <Row gutter={[24, 24]}>
-          <Col xs={24} lg={12}>
-            <Card
-              title={
-                <div className="flex items-center">
-                  <Save className="w-5 h-5 mr-2 text-indigo-600" />
-                  Update Announcement
-                </div>
-              }
-              className="shadow-sm"
-            >
-              {loadingAnnouncement ? (
-                <Skeleton active />
-              ) : (
-                <Form form={form} layout="vertical" onFinish={handleUpdate}>
-                  <Form.Item
-                    label="Announcement Content"
-                    name="content"
-                    rules={[
-                      {
-                        required: true,
-                        message: "Please enter announcement content",
-                      },
-                    ]}
+                <Form.Item
+                  label="Active Status"
+                  name="isActive"
+                  valuePropName="checked"
+                >
+                  <Switch
+                    checkedChildren="Active"
+                    unCheckedChildren="Inactive"
+                    checked={isActive}
+                    onChange={(checked) => setIsActive(checked)}
+                    style={{
+                      backgroundColor: isActive ? "#4f46e5" : "#d1d5db",
+                    }}
+                  />
+                </Form.Item>
+
+                <Form.Item>
+                  <Button
+                    type="primary"
+                    htmlType="submit"
+                    loading={isLoading}
+                    className="w-full"
+                    style={{
+                      backgroundColor: "#4f46e5",
+                      borderColor: "#4f46e5",
+                    }}
+                    size="large"
                   >
-                    <TextArea
-                      rows={6}
-                      placeholder="Enter your announcement..."
-                      showCount
-                      maxLength={1000}
-                    />
-                  </Form.Item>
-
-                  <Form.Item
-                    label="Active Status"
-                    name="isActive"
-                    valuePropName="checked"
-                  >
-                    <Switch
-                      checkedChildren="Active"
-                      unCheckedChildren="Inactive"
-                      checked={isActive}
-                      onChange={(checked) => setIsActive(checked)}
-                      style={{
-                        backgroundColor: isActive ? "#4f46e5" : "#d1d5db",
-                      }}
-                    />
-                  </Form.Item>
-
-                  <Form.Item>
-                    <Button
-                      type="primary"
-                      htmlType="submit"
-                      loading={isLoading}
-                      className="w-full"
-                      style={{
-                        backgroundColor: "#4f46e5",
-                        borderColor: "#4f46e5",
-                      }}
-                      size="large"
-                    >
-                      {isLoading ? "Updating..." : "Update Announcement"}
-                    </Button>
-                  </Form.Item>
-                </Form>
-              )}
-            </Card>
-          </Col>
-        </Row>
-      </div>
-    </div>
+                    {isLoading ? "Updating..." : "Update Announcement"}
+                  </Button>
+                </Form.Item>
+              </Form>
+            )}
+          </Card>
+        </Col>
+      </Row>
+    </PageContainer>
   );
 };
 

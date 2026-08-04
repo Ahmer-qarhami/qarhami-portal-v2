@@ -18,6 +18,10 @@ const { confirm } = Modal;
 import { ExcelToJson } from "../utils/ExcelReader";
 import "../App.css";
 import LoadingSpinner from "../components/LoadingSpinner.jsx";
+import PageContainer from "../components/PageContainer.jsx";
+import ResponsiveDataCard from "../components/ResponsiveDataCard.jsx";
+import { useIsDesktop } from "../hooks/useMediaQuery";
+import { tableScroll } from "../utils/responsive";
 import {
   uploadData,
   getAllDevices,
@@ -50,6 +54,7 @@ function filterDevices(items, text, selectedStatus) {
 }
 
 const Home = () => {
+  const isDesktop = useIsDesktop();
   const [data, setData] = useState([]);
   const [filteredData, setFilteredData] = useState([]);
   const [expandPanel, setExpandPanel] = useState([]);
@@ -227,8 +232,16 @@ const Home = () => {
     handleCancel();
   };
 
+  const resolveDeviceSerial = (serialCandidate) => {
+    if (typeof serialCandidate === "string") {
+      const trimmed = serialCandidate.trim();
+      if (trimmed) return trimmed;
+    }
+    return formData?.deviceSerial?.trim?.() || "";
+  };
+
   const handleDeactivateDeviceSIM = async (serialFromRow) => {
-    const selectedSerial = serialFromRow || formData?.deviceSerial;
+    const selectedSerial = resolveDeviceSerial(serialFromRow);
 
     if (!selectedSerial) {
       message.error("Please select a device serial first");
@@ -282,7 +295,7 @@ const Home = () => {
   };
 
   const handleReactivateDeviceSIM = async (serialFromRow) => {
-    const selectedSerial = serialFromRow || formData?.deviceSerial;
+    const selectedSerial = resolveDeviceSerial(serialFromRow);
 
     if (!selectedSerial) {
       message.error("Please select a device serial first");
@@ -444,15 +457,69 @@ const Home = () => {
     ),
   ];
 
+  const renderDeviceCards = (items) => (
+    <div className="grid grid-cols-1 gap-4">
+      {items.map((record) => {
+        const isDeactivated =
+          record?.simStatus === "DEACTIVATED" ||
+          record?.status === "DEACTIVATED";
+
+        return (
+          <ResponsiveDataCard
+            key={record.key || record.deviceSerial}
+            title={record.deviceSerial || "Unknown Serial"}
+            subtitle={record.carName || record.email || "No linked account"}
+            status={record.simStatus || record.status || "Unknown"}
+            statusColor={isDeactivated ? "red" : "blue"}
+            onClick={() => {
+              setFormData(record);
+              formRef?.current?.setFieldsValue(record);
+              onExpandPanel(record.deviceSerial);
+            }}
+            rows={[
+              { label: "Email", value: record.email || "-" },
+              { label: "IMEI", value: record.imei || "-" },
+              { label: "ICCID", value: record.iccid || "-" },
+              { label: "VIN", value: record.vin || "-" },
+            ]}
+            actions={
+              <>
+                {isDeactivated ? (
+                  <Button
+                    type="primary"
+                    size="small"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleReactivateDeviceSIM(record?.deviceSerial);
+                    }}
+                  >
+                    Reactivate
+                  </Button>
+                ) : (
+                  <Button
+                    danger
+                    size="small"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeactivateDeviceSIM(record?.deviceSerial);
+                    }}
+                  >
+                    Deactivate
+                  </Button>
+                )}
+              </>
+            }
+          />
+        );
+      })}
+    </div>
+  );
+
   return (
     <div>
       {isLoading && <LoadingSpinner message="Loading devices..." />}
       {!isLoading && (
-        <div className=" bg-gray-100 flex flex-col items-center justify-center ">
-          <div className="bg-white rounded-lg shadow-lg p-8 m-4 w-full max-w-[calc(100vw-32px)] h-[calc(100vh-100px)] flex flex-col">
-            <h2 className="text-xl font-semibold mb-4">
-              Device Table ({visibleDeviceCount}/{totalDeviceCount})
-            </h2>
+        <PageContainer title={`Device Table (${visibleDeviceCount}/${totalDeviceCount})`}>
             <Collapse
               className="bg-indigo-50 mb-3 sm:min-h-[30px] overflow-auto"
               size="small"
@@ -505,10 +572,11 @@ const Home = () => {
                       </Form>
 
                       {/* Add the Assign Devices button */}
+                      <div className="flex flex-wrap gap-2 mb-3">
                       <Button
                         type="primary"
                         onClick={showModal}
-                        className="mr-3 bg-indigo-600 hover:bg-indigo-700"
+                        className="bg-indigo-600 hover:bg-indigo-700"
                       >
                         Assign Devices to Email
                       </Button>
@@ -517,7 +585,6 @@ const Home = () => {
                         <Button
                           type="primary"
                           onClick={() => handleReactivateDeviceSIM()}
-                          className="mr-3"
                         >
                           Reactivate Device SIM
                         </Button>
@@ -525,21 +592,28 @@ const Home = () => {
                         <Button
                           type="primary"
                           danger
-                          onClick={handleDeactivateDeviceSIM}
-                          className="mr-3"
+                          onClick={() =>
+                            handleDeactivateDeviceSIM(formData?.deviceSerial)
+                          }
                         >
                           Deactivate Device SIM
                         </Button>
                       )}
-                      <label htmlFor="uploadFile">Upload Excel File</label>
+                      <label
+                        htmlFor="uploadFile"
+                        className="inline-flex items-center text-sm cursor-pointer"
+                      >
+                        <span className="mr-2">Upload Excel File</span>
                       <input
-                        className="ml-3"
+                        className="max-w-full text-sm"
                         id="uploadFile"
                         type="file"
                         accept=".xlsx, .xls, .csv"
                         onChange={handleFileUpload}
                         title="Upload Excel File"
                       />
+                      </label>
+                      </div>
                     </>
                   ),
                 },
@@ -557,13 +631,17 @@ const Home = () => {
                     label: `Duplicate Devices (${duplicateData.length})`,
                     children: (
                       <>
-                        <Table
-                          size="small"
-                          dataSource={duplicateData}
-                          columns={columns}
-                          pagination={false}
-                          scroll={{ y: 180 }}
-                        />
+                        {isDesktop ? (
+                          <Table
+                            size="small"
+                            dataSource={duplicateData}
+                            columns={columns}
+                            pagination={false}
+                            scroll={{ y: 180, x: "max-content" }}
+                          />
+                        ) : (
+                          renderDeviceCards(duplicateData)
+                        )}
                       </>
                     ),
                   },
@@ -574,8 +652,9 @@ const Home = () => {
             {/* Table Container - Ensure it grows and doesn't overflow */}
             <div className="flex-grow min-h-0 overflow-auto">
               <hr className="border-indigo-200" />
-              <div className="mt-3 mb-3 flex gap-3">
+              <div className="mt-3 mb-3 flex flex-col sm:flex-row gap-2 sm:gap-3">
                 <Search
+                  className="w-full"
                   placeholder="input search text"
                   onSearch={(value) => onFilterData(value)}
                   allowClear
@@ -584,7 +663,7 @@ const Home = () => {
                 <Select
                   value={statusFilter}
                   onChange={onStatusFilterChange}
-                  style={{ minWidth: 220 }}
+                  className="w-full sm:w-auto sm:min-w-[12rem]"
                 >
                   {availableStatuses.map((status) => (
                     <Option key={status} value={status}>
@@ -595,14 +674,20 @@ const Home = () => {
               </div>
               {initialLoading ? (
                 <Skeleton active />
-              ) : (
+              ) : filteredData.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-6 text-center text-sm text-gray-500">
+                  No devices found.
+                </div>
+              ) : isDesktop ? (
                 <Table
                   size="small"
                   dataSource={filteredData}
                   columns={columns}
                   pagination={false}
-                  scroll={{ y: 350 }}
+                  scroll={tableScroll}
                 />
+              ) : (
+                renderDeviceCards(filteredData)
               )}
 
               {/* <table className="min-w-full divide-y divide-gray-200">
@@ -660,6 +745,7 @@ const Home = () => {
               title="Assign Devices to Email"
               open={isModalVisible}
               onCancel={handleCancel}
+              width="min(100%, 32rem)"
               footer={[
                 <Button key="cancel" onClick={handleCancel}>
                   Cancel
@@ -707,8 +793,7 @@ const Home = () => {
                 />
               </div>
             </Modal>
-          </div>
-        </div>
+        </PageContainer>
       )}
     </div>
   );

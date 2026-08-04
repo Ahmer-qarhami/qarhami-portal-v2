@@ -3,6 +3,10 @@ import { Button, Input, Select, Table, message } from "antd";
 import { ExcelToJson } from "../utils/ExcelReader";
 import { getAllActiveDevices } from "../api/Devices";
 import LoadingSpinner from "../components/LoadingSpinner.jsx";
+import PageContainer from "../components/PageContainer.jsx";
+import ResponsiveDataCard from "../components/ResponsiveDataCard.jsx";
+import { useIsDesktop } from "../hooks/useMediaQuery";
+import { tableScroll } from "../utils/responsive";
 
 const { Option } = Select;
 
@@ -76,6 +80,7 @@ const pickRowValues = (row = {}) => {
 };
 
 const Reconciliation = () => {
+  const isDesktop = useIsDesktop();
   const [isLoading, setIsLoading] = useState(false);
   const [rows, setRows] = useState([]);
   const [resultFilter, setResultFilter] = useState("ALL");
@@ -246,26 +251,47 @@ const Reconciliation = () => {
     },
   ];
 
+  const renderCards = () => (
+    <div className="grid grid-cols-1 gap-4">
+      {filteredRows.map((record) => (
+        <ResponsiveDataCard
+          key={record.id}
+          title={record.reconcileKey || "Unknown Key"}
+          status={record.result}
+          statusColor={record.result === "MATCHED" ? "green" : "red"}
+          rows={[
+            { label: "Stripe", value: record.expectedQty },
+            { label: "Qarhami", value: record.actualQty },
+            { label: "Amount (USD)", value: formatCurrency(record.remarks) },
+          ]}
+          className={
+            record.result === "MATCHED" ? "bg-green-50" : "bg-red-50"
+          }
+        />
+      ))}
+    </div>
+  );
+
   return (
-    <div className="bg-gray-100 flex flex-col items-center justify-center">
+    <>
       {isLoading && (
         <LoadingSpinner message="Reconciling with Qarhami (SUBSCRIBED / SUBSCRIBED_ACK only)..." />
       )}
-      <div className="bg-white rounded-lg shadow-lg p-8 m-4 w-full max-w-[calc(100vw-32px)] h-[calc(100vh-100px)] flex flex-col">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-semibold">Stripe Reconciliation</h2>
-          <div className="flex gap-3 items-center">
+      <PageContainer
+        title="Stripe Reconciliation"
+        actions={
+          <>
             <Input
               placeholder="Filter by email"
               value={emailFilter}
               onChange={(e) => setEmailFilter(e.target.value)}
               allowClear
-              style={{ minWidth: 220 }}
+              className="w-full sm:w-auto sm:min-w-[12rem]"
             />
             <Select
               value={resultFilter}
               onChange={setResultFilter}
-              style={{ minWidth: 180 }}
+              className="w-full sm:w-auto sm:min-w-[10rem]"
             >
               <Option value="ALL">All</Option>
               <Option value="MATCHED">Matched</Option>
@@ -274,7 +300,7 @@ const Reconciliation = () => {
             <Button
               type="primary"
               onClick={openFilePicker}
-              className="bg-indigo-600 hover:bg-indigo-700"
+              className="bg-indigo-600 hover:bg-indigo-700 w-full sm:w-auto"
             >
               Upload Excel/CSV
             </Button>
@@ -284,40 +310,48 @@ const Reconciliation = () => {
               type="file"
               accept=".xlsx,.xls,.csv"
               onChange={handleFileUpload}
-              style={{ display: "none" }}
+              className="hidden"
             />
-          </div>
-        </div>
-
-        <div className="mb-3 text-sm">
-          <span className="mr-4">
+          </>
+        }
+      >
+        <div className="mb-3 text-sm shrink-0">
+          <span className="mr-4 block sm:inline">
             Matched: <strong className="text-green-700">{matchedCount}</strong>
           </span>
-          <span>
+          <span className="block sm:inline">
             Unmatched:{" "}
             <strong className="text-red-700">{unmatchedCount}</strong>
           </span>
         </div>
 
         <div className="flex-grow min-h-0 overflow-auto">
-          <Table
-            size="small"
-            dataSource={filteredRows}
-            columns={columns}
-            rowKey="id"
-            pagination={false}
-            scroll={{ y: 460 }}
-            rowClassName={(record) =>
-              record.result === "MATCHED"
-                ? "bg-green-50"
-                : record.result === "UNMATCHED"
-                  ? "bg-red-50"
-                  : ""
-            }
-          />
+          {filteredRows.length === 0 ? (
+            <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-6 text-center text-sm text-gray-500">
+              No reconciliation rows to display.
+            </div>
+          ) : isDesktop ? (
+            <Table
+              size="small"
+              dataSource={filteredRows}
+              columns={columns}
+              rowKey="id"
+              pagination={false}
+              scroll={tableScroll}
+              rowClassName={(record) =>
+                record.result === "MATCHED"
+                  ? "bg-green-50"
+                  : record.result === "UNMATCHED"
+                    ? "bg-red-50"
+                    : ""
+              }
+            />
+          ) : (
+            renderCards()
+          )}
         </div>
-      </div>
-    </div>
+      </PageContainer>
+    </>
   );
 };
 

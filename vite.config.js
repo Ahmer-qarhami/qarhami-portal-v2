@@ -2,6 +2,8 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { VitePWA } from "vite-plugin-pwa";
 
+// .env is a symlink to ../envs/shared/.env
+
 export default defineConfig({
   plugins: [
     react(),

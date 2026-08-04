@@ -16,6 +16,8 @@ import {
 import Sidebar from "./components/Sidebar.jsx";
 import LoadingSpinner from "./components/LoadingSpinner.jsx";
 import ProtectedRoute from "./ProtectedRoute";
+import { useIsDesktop } from "./hooks/useMediaQuery";
+import { Menu } from "lucide-react";
 
 // Lazy load page components for better performance
 const Home = lazy(() => import("./pages/Home.jsx"));
@@ -56,6 +58,9 @@ const Layout = ({
   setIsAuthenticated,
   sidebarCollapsed,
   setSidebarCollapsed,
+  mobileMenuOpen,
+  setMobileMenuOpen,
+  isDesktop,
   versionUpdateModalOpen,
   appVersion,
   availableVersion,
@@ -64,22 +69,52 @@ const Layout = ({
 }) => {
   const location = useLocation();
   const isLoginPage = location.pathname === "/login";
+  const showSidebar = isAuthenticated && !isLoginPage;
+
+  useEffect(() => {
+    setMobileMenuOpen(false);
+  }, [location.pathname, setMobileMenuOpen]);
 
   return (
     <>
-      {isAuthenticated && !isLoginPage && (
+      {showSidebar && (
         <Sidebar
           setIsAuthenticated={setIsAuthenticated}
           collapsed={sidebarCollapsed}
           setCollapsed={setSidebarCollapsed}
+          mobileOpen={mobileMenuOpen}
+          setMobileOpen={setMobileMenuOpen}
+          isDesktop={isDesktop}
         />
       )}
+
+      {showSidebar && !isDesktop && (
+        <header className="fixed top-0 left-0 right-0 z-30 flex items-center gap-3 bg-indigo-600 px-3 py-3 text-white shadow-md lg:hidden">
+          <button
+            type="button"
+            onClick={() => setMobileMenuOpen(true)}
+            className="rounded-md p-1.5 hover:bg-indigo-700"
+            aria-label="Open menu"
+          >
+            <Menu size={22} />
+          </button>
+          <img
+            src="./img/logoIcon.png"
+            alt="Qarhami"
+            className="h-7 w-7 shrink-0"
+          />
+          <span className="truncate text-base font-semibold">Qarhami Portal</span>
+        </header>
+      )}
+
       <div
-        className={`transition-all duration-300 ${
-          isAuthenticated && !isLoginPage
-            ? sidebarCollapsed
-              ? "ml-16"
-              : "ml-64"
+        className={`transition-all duration-300 min-w-0 ${
+          showSidebar
+            ? isDesktop
+              ? sidebarCollapsed
+                ? "lg:ml-16"
+                : "lg:ml-64"
+              : "pt-14"
             : ""
         }`}
       >
@@ -123,6 +158,8 @@ const App = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [loading, setLoading] = useState(true);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const isDesktop = useIsDesktop();
   const [versionUpdateModalOpen, setVersionUpdateModalOpen] = useState(false);
   const [availableVersion, setAvailableVersion] = useState("");
   const appVersion = import.meta.env.VITE_VERSION || "1.0.0";
@@ -298,6 +335,9 @@ const App = () => {
         setIsAuthenticated={setIsAuthenticated}
         sidebarCollapsed={sidebarCollapsed}
         setSidebarCollapsed={setSidebarCollapsed}
+        mobileMenuOpen={mobileMenuOpen}
+        setMobileMenuOpen={setMobileMenuOpen}
+        isDesktop={isDesktop}
         versionUpdateModalOpen={versionUpdateModalOpen}
         appVersion={appVersion}
         availableVersion={availableVersion}

@@ -1,16 +1,20 @@
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import { Button, Table, message, Input } from "antd";
 import { SearchOutlined, DownloadOutlined } from "@ant-design/icons";
 import LoadingSpinner from "../components/LoadingSpinner.jsx";
+import PageContainer from "../components/PageContainer.jsx";
+import ResponsiveDataCard from "../components/ResponsiveDataCard.jsx";
+import { useIsDesktop } from "../hooks/useMediaQuery";
 import { getAllActiveDevices } from "../api/Devices";
+import { tableScroll } from "../utils/responsive";
 import * as XLSX from "xlsx";
 
 const DeviceStatusReport = () => {
+  const isDesktop = useIsDesktop();
   const [data, setData] = useState([]);
   const [filteredData, setFilteredData] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
 
-  // Function to format Unix timestamp to readable date
   const formatDate = (timestamp) => {
     if (!timestamp) return "-";
     const date = new Date(Number(timestamp * 1000));
@@ -21,7 +25,6 @@ const DeviceStatusReport = () => {
     });
   };
 
-  // Table columns
   const columns = [
     {
       title: "Email",
@@ -104,7 +107,6 @@ const DeviceStatusReport = () => {
     }
   };
 
-  // Search function
   const onFilterData = (text) => {
     text = text.toLowerCase();
     if (text === "") {
@@ -126,9 +128,7 @@ const DeviceStatusReport = () => {
     }
   };
 
-  // Export functions
   const exportToExcel = (dataToExport, filename) => {
-    // Prepare data for export with formatted dates
     const exportData = dataToExport.map((item) => ({
       Email: item.email,
       VIN: item.vin,
@@ -164,31 +164,55 @@ const DeviceStatusReport = () => {
     message.success("Filtered records exported successfully");
   };
 
-  return (
-    <div className="bg-gray-100 min-h-screen">
-      <div className="bg-white rounded-lg shadow-lg p-8 m-4 flex flex-col">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-semibold">Device Status Report</h2>
-          {data.length > 0 && (
-            <div className="text-sm text-gray-600">
-              {filteredData.length !== data.length ? (
-                <span>
-                  Filtered Devices: {filteredData.length} / {data.length}
-                </span>
-              ) : (
-                <span>All Devices: {data.length}</span>
-              )}
-            </div>
-          )}
-        </div>
+  const countLabel =
+    data.length > 0 ? (
+      <span className="text-sm text-gray-600">
+        {filteredData.length !== data.length
+          ? `Filtered Devices: ${filteredData.length} / ${data.length}`
+          : `All Devices: ${data.length}`}
+      </span>
+    ) : null;
 
-        {/* Upper div with buttons */}
-        <div className="mb-4 flex gap-2">
+  const renderCards = () => (
+    <div className="grid grid-cols-1 gap-4">
+      {filteredData.map((record, index) => (
+        <ResponsiveDataCard
+          key={record.deviceSerial || record.vin || index}
+          title={record.carName || record.deviceSerial || "Vehicle"}
+          subtitle={record.email || "No email"}
+          status={record.deviceStatus || "Unknown"}
+          statusColor="blue"
+          rows={[
+            { label: "VIN", value: record.vin || "-" },
+            { label: "Plate Number", value: record.plateNumber || "-" },
+            { label: "Device Serial", value: record.deviceSerial || "-" },
+            {
+              label: "Subscription Status",
+              value: record.subscriptionStatus || "-",
+            },
+            {
+              label: "Free Trial End Date",
+              value: formatDate(record.freeTrialEndDate),
+            },
+          ]}
+        />
+      ))}
+    </div>
+  );
+
+  return (
+  <>
+    {isLoading && <LoadingSpinner message="Running report..." />}
+    <PageContainer
+      title="Device Status Report"
+      actions={
+        <>
+          {countLabel}
           <Button
             type="primary"
             onClick={runReport}
             loading={isLoading}
-            className="bg-indigo-600 hover:bg-indigo-700"
+            className="bg-indigo-600 hover:bg-indigo-700 w-full sm:w-auto"
           >
             {isLoading ? "Running Report..." : "RUN REPORT"}
           </Button>
@@ -197,7 +221,7 @@ const DeviceStatusReport = () => {
               type="default"
               onClick={exportAllRecords}
               icon={<DownloadOutlined />}
-              className="border-indigo-600 text-indigo-600 hover:border-indigo-700 hover:text-indigo-700"
+              className="border-indigo-600 text-indigo-600 hover:border-indigo-700 hover:text-indigo-700 w-full sm:w-auto"
             >
               Export All
             </Button>
@@ -207,33 +231,41 @@ const DeviceStatusReport = () => {
               type="default"
               onClick={exportFilteredRecords}
               icon={<DownloadOutlined />}
-              className="border-green-600 text-green-600 hover:border-green-700 hover:text-green-700"
+              className="border-green-600 text-green-600 hover:border-green-700 hover:text-green-700 w-full sm:w-auto"
             >
               Export Filtered
             </Button>
           )}
-        </div>
-
-        {/* Table for data */}
-        <div className="flex-grow min-h-0 overflow-auto">
-          <Input
-            placeholder="Search all columns..."
-            prefix={<SearchOutlined />}
-            onChange={(e) => onFilterData(e.target.value)}
-            className="mb-3"
-            allowClear
-          />
+        </>
+      }
+    >
+      <div className="flex-grow min-h-0 overflow-auto">
+        <Input
+          placeholder="Search all columns..."
+          prefix={<SearchOutlined />}
+          onChange={(e) => onFilterData(e.target.value)}
+          className="mb-3 w-full"
+          allowClear
+        />
+        {filteredData.length === 0 ? (
+          <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-6 text-center text-sm text-gray-500">
+            No report data available.
+          </div>
+        ) : isDesktop ? (
           <Table
             size="small"
             dataSource={filteredData}
             columns={columns}
             pagination={false}
-            scroll={{ y: 500 }}
+            scroll={tableScroll}
             loading={isLoading}
           />
-        </div>
+        ) : (
+          renderCards()
+        )}
       </div>
-    </div>
+    </PageContainer>
+  </>
   );
 };
 

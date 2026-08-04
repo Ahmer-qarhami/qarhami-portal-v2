@@ -18,6 +18,10 @@ const { Option } = Select;
 import { ExcelToJson } from "../utils/ExcelReader";
 import "../App.css";
 import LoadingSpinner from "../components/LoadingSpinner.jsx";
+import PageContainer from "../components/PageContainer.jsx";
+import ResponsiveDataCard from "../components/ResponsiveDataCard.jsx";
+import { useIsDesktop } from "../hooks/useMediaQuery";
+import { tableScroll } from "../utils/responsive";
 import {
   getDataByEmail,
   updateFreeTrialStatus,
@@ -27,6 +31,7 @@ import {
 import dayjs from "dayjs";
 
 const Management = () => {
+  const isDesktop = useIsDesktop();
   const [data, setData] = useState([]);
   const [filteredData, setFilteredData] = useState([]);
   const [expandPanel, setExpandPanel] = useState([]);
@@ -348,15 +353,95 @@ const Management = () => {
   //useEffect for page load
   useEffect(() => {}, []);
 
+  const openRecord = (record) => {
+    const formDataCopy = { ...record };
+
+    if (formDataCopy.freeTrialEndDate) {
+      formDataCopy.freeTrialEndDate = dayjs(
+        Number(formDataCopy.freeTrialEndDate) * 1000,
+      );
+    }
+
+    setFormData(formDataCopy);
+    formRef?.current?.setFieldsValue(formDataCopy);
+    onExpandPanel(record?.deviceSerial);
+  };
+
+  const renderManagementCards = (items) => (
+    <div className="grid grid-cols-1 gap-4">
+      {items.map((record) => {
+        const cancelled = subscriptionLooksCancelled(record.subscriptionStatus);
+        const showUndoCancel = canShowUndoCancel(record.subscriptionStatus);
+        const loading = cancellingSerial === record.deviceSerial;
+        const undoLoading = undoingSerial === record.deviceSerial;
+
+        return (
+          <ResponsiveDataCard
+            key={record.deviceSerial}
+            title={record.deviceSerial || "Unknown Serial"}
+            subtitle={record.carName || record.email || "No vehicle name"}
+            status={record.subscriptionStatus || "Unknown"}
+            statusColor={cancelled ? "red" : "blue"}
+            onClick={() => openRecord(record)}
+            rows={[
+              { label: "Email", value: record.email || "-" },
+              { label: "Free Trial Expiry", value: formatDate(record.freeTrialEndDate) },
+              { label: "Billing Date", value: formatDate(record.billingDate) },
+            ]}
+            actions={
+              <>
+                {!cancelled ? (
+                  <Popconfirm
+                    title="Cancel subscription?"
+                    description="This will cancel the subscription for this vehicle."
+                    okText="Yes, cancel"
+                    cancelText="No"
+                    onConfirm={() => handleCancelSubscription(record)}
+                  >
+                    <Button
+                      danger
+                      size="small"
+                      loading={loading}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      Cancel
+                    </Button>
+                  </Popconfirm>
+                ) : (
+                  <Button danger size="small" disabled>
+                    Cancel
+                  </Button>
+                )}
+                {showUndoCancel ? (
+                  <Popconfirm
+                    title="Undo cancellation?"
+                    description="This will restore the subscription for this vehicle."
+                    okText="Yes, undo"
+                    cancelText="No"
+                    onConfirm={() => handleUndoCancelSubscription(record)}
+                  >
+                    <Button
+                      size="small"
+                      loading={undoLoading}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      Undo Cancel
+                    </Button>
+                  </Popconfirm>
+                ) : null}
+              </>
+            }
+          />
+        );
+      })}
+    </div>
+  );
+
   return (
     <div>
       {isLoading && <LoadingSpinner message="Loading data..." />}
       {!isLoading && (
-        <div className=" bg-gray-100 flex flex-col items-center justify-center ">
-          <div className="bg-white rounded-lg shadow-lg p-8 m-4 w-full max-w-[calc(100vw-32px)] h-[calc(100vh-100px)] flex flex-col">
-            <h2 className="text-xl font-semibold mb-4">
-              Free Trial Management
-            </h2>
+        <PageContainer title="Free Trial Management">
             <Collapse
               className="bg-indigo-50 mb-3 sm:min-h-[30px] overflow-auto"
               size="small"
@@ -436,13 +521,14 @@ const Management = () => {
                           </Col>
                         </Row>
                         <Row>
-                          <Col>
+                          <Col span={24}>
+                            <div className="flex flex-wrap gap-2">
                             <Button
                               type="primary"
                               onClick={() => {
                                 getData(formData.email);
                               }}
-                              className="mr-3 bg-indigo-600 hover:bg-indigo-700"
+                              className="bg-indigo-600 hover:bg-indigo-700"
                             >
                               Get Data
                             </Button>
@@ -454,6 +540,7 @@ const Management = () => {
                             >
                               {isSaving ? "Saving..." : "Save Changes"}
                             </Button>
+                            </div>
                           </Col>
                         </Row>
                       </Form>
@@ -474,13 +561,17 @@ const Management = () => {
                     label: `Duplicate Devices (${duplicateData.length})`,
                     children: (
                       <>
-                        <Table
-                          size="small"
-                          dataSource={duplicateData}
-                          columns={columns}
-                          pagination={false}
-                          scroll={{ y: 180 }}
-                        />
+                        {isDesktop ? (
+                          <Table
+                            size="small"
+                            dataSource={duplicateData}
+                            columns={columns}
+                            pagination={false}
+                            scroll={{ y: 180, x: "max-content" }}
+                          />
+                        ) : (
+                          renderManagementCards(duplicateData)
+                        )}
                       </>
                     ),
                   },
@@ -492,20 +583,27 @@ const Management = () => {
             <div className="flex-grow min-h-0 overflow-auto">
               <hr className="border-indigo-200" />
               <Search
-                className="mt-3"
+                className="mt-3 w-full"
                 placeholder="input search text"
                 onSearch={(value) => onFilterData(value)}
               />
-              <Table
-                size="small"
-                dataSource={filteredData}
-                columns={columns}
-                pagination={false}
-                scroll={{ y: 350 }}
-              />
+              {filteredData.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-6 text-center text-sm text-gray-500">
+                  No vehicles found.
+                </div>
+              ) : isDesktop ? (
+                <Table
+                  size="small"
+                  dataSource={filteredData}
+                  columns={columns}
+                  pagination={false}
+                  scroll={tableScroll}
+                />
+              ) : (
+                renderManagementCards(filteredData)
+              )}
             </div>
-          </div>
-        </div>
+        </PageContainer>
       )}
     </div>
   );

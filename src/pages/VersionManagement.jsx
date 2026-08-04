@@ -13,9 +13,11 @@ import {
   Checkbox,
   Modal,
   Skeleton,
+  Upload,
+  Image,
 } from "antd";
 const { Search } = Input;
-import { EditOutlined, BarsOutlined } from "@ant-design/icons";
+import { EditOutlined, BarsOutlined, UploadOutlined } from "@ant-design/icons";
 import {
   DndContext,
   closestCenter,
@@ -34,17 +36,21 @@ import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 const { TextArea } = Input;
 import "../App.css";
-import LoadingSpinner from "../components/LoadingSpinner.jsx";
+import PageContainer from "../components/PageContainer.jsx";
+import ResponsiveDataCard from "../components/ResponsiveDataCard.jsx";
+import { useIsDesktop } from "../hooks/useMediaQuery";
+import { tableScroll } from "../utils/responsive";
 import {
-  uploadData,
-  getAllDevices,
-  assignEmailToDevices,
   createVersion,
   updateVersion,
   updateBulkVersions,
   getAllVersions,
   resetWhatsNew,
 } from "../api/Devices";
+import {
+  uploadAttachments,
+  resolveAttachmentUrl,
+} from "../api/Attachments";
 import dayjs from "dayjs";
 
 const DraggableRow = ({ children, ...props }) => {
@@ -79,6 +85,7 @@ const DraggableRow = ({ children, ...props }) => {
 };
 
 const VersionManagement = () => {
+  const isDesktop = useIsDesktop();
   const [data, setData] = useState([]);
   const [filteredData, setFilteredData] = useState([]);
   const [searchText, setSearchText] = useState("");
@@ -98,10 +105,10 @@ const VersionManagement = () => {
     isActive: false,
     index: 0,
   });
-  const [isLoading, setIsLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
+  const [isImageUploading, setIsImageUploading] = useState(false);
   const [expandPanel, setExpandPanel] = useState([]);
   const [isEditing, setIsEditing] = useState(false);
   const [isReorderModalOpen, setIsReorderModalOpen] = useState(false);
@@ -266,16 +273,62 @@ const VersionManagement = () => {
     }
   };
 
+  const setImageLinkValue = (url) => {
+    setFormData((prev) => ({
+      ...prev,
+      imageLink: url,
+      hasImageLink: !!url || prev.hasImageLink,
+    }));
+    form.setFieldsValue({
+      imageLink: url,
+      ...(url ? { hasImageLink: true } : {}),
+    });
+  };
+
+  const handleImageUpload = async (file) => {
+    if (!file) return false;
+
+    if (!file.type?.startsWith("image/")) {
+      message.error("Please upload an image file (PNG, JPG, WebP, etc.)");
+      return false;
+    }
+
+    if (file.size > 10 * 1024 * 1024) {
+      message.error("Image size should be less than 10MB");
+      return false;
+    }
+
+    try {
+      setIsImageUploading(true);
+      const uploaded = await uploadAttachments([file]);
+      const attachment = uploaded?.[0];
+      const imageUrl = attachment?.url;
+
+      if (!imageUrl) {
+        throw new Error("Upload succeeded but no image URL was returned");
+      }
+
+      setImageLinkValue(imageUrl);
+      message.success("Image uploaded to files.qarhami.com");
+    } catch (error) {
+      console.error("Error uploading version image:", error);
+      message.error(error.message || "Failed to upload image");
+    } finally {
+      setIsImageUploading(false);
+    }
+
+    // Prevent Ant Design Upload from doing its own upload
+    return false;
+  };
+
   // Handle form submission
   const onFinish = async (values) => {
-    debugger;
-
     try {
       setIsSaving(true);
 
       // Custom validation for conditional fields
       if (values.hasImageLink && !values.imageLink?.trim()) {
-        message.error("Please enter image link");
+        message.error("Please upload an image or enter an image link");
         setIsSaving(false);
         return;
       }
@@ -292,6 +345,11 @@ const VersionManagement = () => {
 
       // Create a copy to avoid mutating original values
       const payload = { ...values };
+
+      // Persist full files.qarhami.com URL when an attachment id was stored
+      if (payload.hasImageLink && payload.imageLink) {
+        payload.imageLink = resolveAttachmentUrl(payload.imageLink);
+      }
 
       // Convert releaseDate to Date object if needed
       if (
@@ -551,65 +609,111 @@ const VersionManagement = () => {
     loadVersions();
   }, []);
 
+  const formatDate = (value) =>
+    value ? dayjs(value).format("MM/DD/YYYY") : "-";
+
+  const renderCards = () => (
+    <div className="grid grid-cols-1 gap-4">
+      {filteredData.map((record) => (
+        <ResponsiveDataCard
+          key={record.id}
+          title={record.version || "Untitled Version"}
+          subtitle={record.heading || "No heading"}
+          status={record.isActive ? "Active" : "Inactive"}
+          statusColor={record.isActive ? "green" : "default"}
+          onClick={() => handleRowClick(record)}
+          rows={[
+            { label: "Release Date", value: formatDate(record.releaseDate) },
+            { label: "Description", value: record.description || "-" },
+            {
+              label: "Image Link",
+              value: record.hasImageLink ? "Enabled" : "Disabled",
+            },
+            {
+              label: "App Link",
+              value: record.hasAppLink ? "Enabled" : "Disabled",
+            },
+            {
+              label: "External Link",
+              value: record.hasExternalLink ? "Enabled" : "Disabled",
+            },
+          ]}
+          actions={
+            <Button
+              type="primary"
+              size="small"
+              icon={<EditOutlined />}
+              className="bg-indigo-600 hover:bg-indigo-700"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleEditClick(record);
+              }}
+            >
+              Edit
+            </Button>
+          }
+        />
+      ))}
+    </div>
+  );
+
   return (
     <div>
       {initialLoading ? (
-        <div className="bg-gray-100 flex flex-col items-center justify-center">
-          <div className="bg-white rounded-lg shadow-lg p-8 m-6 w-full max-w-[calc(100vw-32px)] h-[calc(100vh-100px)] flex flex-col">
-            <Skeleton active />
-          </div>
-        </div>
+        <PageContainer>
+          <Skeleton active />
+        </PageContainer>
       ) : (
-        <div className="bg-gray-100 flex flex-col items-center justify-center">
-          <div className="bg-white rounded-lg shadow-lg p-8 m-6 w-full max-w-[calc(100vw-32px)] h-[calc(100vh-100px)] flex flex-col">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-semibold">Version Management</h2>
-              <div className="flex gap-2">
-                <Button
-                  type="default"
-                  onClick={handleResetWhatsNew}
-                  loading={isResetting}
-                  className="border-red-500 text-red-600 hover:border-red-600"
-                >
-                  {isResetting ? "Resetting..." : "Reset What's New"}
-                </Button>
-                <Button
-                  type="default"
-                  icon={<BarsOutlined />}
-                  onClick={handleReorderModal}
-                  className="border-indigo-500 text-indigo-600 hover:border-indigo-600"
-                >
-                  Reorder Records
-                </Button>
-                <Button
-                  type="primary"
-                  onClick={() => {
-                    setFormData({
-                      id: "",
-                      serialNo: "",
-                      version: "",
-                      releaseDate: null,
-                      heading: "",
-                      description: "",
-                      imageLink: "",
-                      hasImageLink: false,
-                      appLink: "",
-                      hasAppLink: false,
-                      externalLink: "",
-                      hasExternalLink: false,
-                      isActive: false,
-                      index: 0,
-                    });
-                    form.resetFields();
-                    setExpandPanel([1]);
-                    setIsEditing(false);
-                  }}
-                  className="bg-blue-600 hover:bg-blue-700"
-                >
-                  Add New Version
-                </Button>
-              </div>
-            </div>
+        <PageContainer
+          title="Version Management"
+          actions={
+            <>
+              <Button
+                type="default"
+                onClick={handleResetWhatsNew}
+                loading={isResetting}
+                className="border-red-500 text-red-600 hover:border-red-600 w-full sm:w-auto"
+              >
+                {isResetting ? "Resetting..." : "Reset What's New"}
+              </Button>
+              <Button
+                type="default"
+                icon={<BarsOutlined />}
+                onClick={handleReorderModal}
+                className="border-indigo-500 text-indigo-600 hover:border-indigo-600 w-full sm:w-auto"
+              >
+                Reorder Records
+              </Button>
+              <Button
+                type="primary"
+                onClick={() => {
+                  setFormData({
+                    id: "",
+                    serialNo: "",
+                    version: "",
+                    releaseDate: null,
+                    heading: "",
+                    description: "",
+                    imageLink: "",
+                    hasImageLink: false,
+                    appLink: "",
+                    hasAppLink: false,
+                    externalLink: "",
+                    hasExternalLink: false,
+                    isActive: false,
+                    index: 0,
+                  });
+                  form.resetFields();
+                  setExpandPanel([1]);
+                  setIsEditing(false);
+                }}
+                className="bg-blue-600 hover:bg-blue-700 w-full sm:w-auto"
+              >
+                Add New Version
+              </Button>
+            </>
+          }
+        >
             <Collapse
               className="bg-indigo-50 mb-3 sm:min-h-[30px] overflow-auto"
               size="small"
@@ -626,7 +730,7 @@ const VersionManagement = () => {
                         size="medium"
                         form={form}
                         layout="vertical"
-                        onFinish={() => onFinish(formData)}
+                        onFinish={onFinish}
                         initialValues={formData}
                         className="text-xs md:text-sm"
                       >
@@ -736,10 +840,10 @@ const VersionManagement = () => {
                                 Has Image Link
                               </Checkbox>
                             </Form.Item>
-                            <Form.Item name="imageLink">
+                            <Form.Item name="imageLink" className="mb-2">
                               <Input
                                 type="text"
-                                placeholder="Enter Image Link"
+                                placeholder="Image URL or upload below"
                                 disabled={!formData.hasImageLink}
                                 onChange={(e) => {
                                   setFormData({
@@ -749,6 +853,40 @@ const VersionManagement = () => {
                                 }}
                               />
                             </Form.Item>
+                            <div className="flex flex-wrap items-center gap-2 mb-3">
+                              <Upload
+                                accept="image/*"
+                                showUploadList={false}
+                                beforeUpload={handleImageUpload}
+                                disabled={isImageUploading}
+                              >
+                                <Button
+                                  icon={<UploadOutlined />}
+                                  loading={isImageUploading}
+                                  disabled={isImageUploading}
+                                >
+                                  {isImageUploading
+                                    ? "Uploading..."
+                                    : "Upload to files.qarhami.com"}
+                                </Button>
+                              </Upload>
+                              {formData.imageLink &&
+                                !formData.imageLink.includes("youtube") &&
+                                !formData.imageLink.includes("youtu.be") &&
+                                !formData.imageLink.includes("lottie") && (
+                                  <Image
+                                    src={resolveAttachmentUrl(formData.imageLink)}
+                                    alt="Version preview"
+                                    width={64}
+                                    height={64}
+                                    style={{
+                                      objectFit: "cover",
+                                      borderRadius: 6,
+                                    }}
+                                    fallback=""
+                                  />
+                                )}
+                            </div>
                           </Col>
                           <Col xs={24} sm={12} md={8} lg={6}>
                             <Form.Item
@@ -854,23 +992,30 @@ const VersionManagement = () => {
                 allowClear
                 value={searchText}
               />
-              <Table
-                size="small"
-                dataSource={filteredData}
-                columns={columns}
-                pagination={false}
-                scroll={{ y: 350 }}
-                onRow={(record) => ({
-                  onClick: (e) => {
-                    console.log("on row click", record);
-                    handleRowClick(record);
-                  },
-                })}
-                rowKey="id"
-              />
+              {filteredData.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-6 text-center text-sm text-gray-500">
+                  No versions found.
+                </div>
+              ) : isDesktop ? (
+                <Table
+                  size="small"
+                  dataSource={filteredData}
+                  columns={columns}
+                  pagination={false}
+                  scroll={tableScroll}
+                  onRow={(record) => ({
+                    onClick: () => {
+                      console.log("on row click", record);
+                      handleRowClick(record);
+                    },
+                  })}
+                  rowKey="id"
+                />
+              ) : (
+                renderCards()
+              )}
             </div>
-          </div>
-        </div>
+        </PageContainer>
       )}
 
       {/* Reorder Modal */}
@@ -879,7 +1024,7 @@ const VersionManagement = () => {
         open={isReorderModalOpen}
         onCancel={() => setIsReorderModalOpen(false)}
         onOk={handleSaveReorder}
-        width={800}
+        width="min(100%, 48rem)"
         okText="Save Order"
         cancelText="Cancel"
       >
@@ -927,7 +1072,7 @@ const VersionManagement = () => {
                 },
               ]}
               pagination={false}
-              scroll={{ y: 300 }}
+              scroll={{ y: 300, x: "max-content" }}
               rowKey="id"
               components={{
                 body: {
