@@ -257,8 +257,18 @@ const Home = () => {
       onOk: async () => {
         try {
           setIsLoading(true);
-          await deactivateDeviceSIM([selectedSerial]);
-          message.success(`SIM deactivation requested for ${selectedSerial}`);
+          const result = await deactivateDeviceSIM([selectedSerial]);
+          if (!result?.success) {
+            message.error(
+              result?.message ||
+                result?.warning ||
+                `Failed to deactivate SIM for ${selectedSerial}`
+            );
+            return;
+          }
+          message.success(
+            result.message || `SIM deactivated for ${selectedSerial}`
+          );
 
           const raw = await getAllDevices();
           const list = Array.isArray(raw) ? raw : [];
@@ -285,7 +295,11 @@ const Home = () => {
           ) {
             message.error("Unauthorized. Please login again.");
           } else {
-            message.error("Failed to deactivate device SIM");
+            message.error(
+              error?.response?.data?.message ||
+                error?.response?.data?.warning ||
+                "Failed to deactivate device SIM"
+            );
           }
         } finally {
           setIsLoading(false);
@@ -310,8 +324,18 @@ const Home = () => {
       onOk: async () => {
         try {
           setIsLoading(true);
-          await reactivateDeviceSIM([selectedSerial]);
-          message.success(`SIM reactivation requested for ${selectedSerial}`);
+          const result = await reactivateDeviceSIM([selectedSerial]);
+          if (!result?.success) {
+            message.error(
+              result?.message ||
+                result?.warning ||
+                `Failed to reactivate SIM for ${selectedSerial}`
+            );
+            return;
+          }
+          message.success(
+            result.message || `SIM reactivated for ${selectedSerial}`
+          );
 
           const raw = await getAllDevices();
           const list = Array.isArray(raw) ? raw : [];
@@ -339,7 +363,11 @@ const Home = () => {
           ) {
             message.error("Unauthorized. Please login again.");
           } else {
-            message.error("Failed to reactivate device SIM");
+            message.error(
+              error?.response?.data?.message ||
+                error?.response?.data?.warning ||
+                "Failed to reactivate device SIM"
+            );
           }
         } finally {
           setIsLoading(false);
