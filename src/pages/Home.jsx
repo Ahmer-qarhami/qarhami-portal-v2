@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Collapse,
   Input,
@@ -11,6 +11,8 @@ import {
   Modal,
   Select,
   Skeleton,
+  Checkbox,
+  Pagination,
 } from "antd";
 const { Search } = Input;
 const { Option } = Select;
@@ -21,7 +23,6 @@ import LoadingSpinner from "../components/LoadingSpinner.jsx";
 import PageContainer from "../components/PageContainer.jsx";
 import ResponsiveDataCard from "../components/ResponsiveDataCard.jsx";
 import { useIsDesktop } from "../hooks/useMediaQuery";
-import { tableScroll } from "../utils/responsive";
 import {
   uploadData,
   getAllDevices,
@@ -30,20 +31,43 @@ import {
   reactivateDeviceSIM,
 } from "../api/Devices";
 
+const SEARCH_DEBOUNCE_MS = 250;
+const MOBILE_PAGE_SIZE = 30;
+const SELECTION_COL_WIDTH = 48;
+const TABLE_X = 1120;
+
+function buildSearchIndex(device) {
+  return [
+    device?.deviceSerial,
+    device?.imei,
+    device?.iccid,
+    device?.status,
+    device?.simStatus,
+    device?.email,
+    device?.fullName,
+    device?.vin,
+    device?.carName,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+}
+
+function indexDevices(items) {
+  return (items || []).map((d) => ({
+    ...d,
+    key: d.deviceSerial,
+    _searchText: buildSearchIndex(d),
+  }));
+}
+
 /** Pure filter used for table rows; keeps behavior consistent with useEffect + handlers. */
 function filterDevices(items, text, selectedStatus) {
-  const normalizedText = (text || "").toLowerCase();
+  const normalizedText = (text || "").trim().toLowerCase();
   return (items || []).filter((d) => {
     const matchesSearch =
       normalizedText === "" ||
-      d?.deviceSerial?.toLowerCase().includes(normalizedText) ||
-      d?.imei?.toLowerCase().includes(normalizedText) ||
-      d?.iccid?.toLowerCase().includes(normalizedText) ||
-      d?.status?.toLowerCase().includes(normalizedText) ||
-      d?.email?.toLowerCase().includes(normalizedText) ||
-      d?.fullName?.toLowerCase().includes(normalizedText) ||
-      d?.vin?.toLowerCase().includes(normalizedText) ||
-      d?.carName?.toLowerCase().includes(normalizedText);
+      (d._searchText || buildSearchIndex(d)).includes(normalizedText);
 
     const deviceStatus = d?.simStatus || d?.status;
     const matchesStatus =
@@ -53,113 +77,130 @@ function filterDevices(items, text, selectedStatus) {
   });
 }
 
+const isDeviceDeactivated = (record) =>
+  record?.simStatus === "DEACTIVATED" || record?.status === "DEACTIVATED";
+
 const Home = () => {
   const isDesktop = useIsDesktop();
   const [data, setData] = useState([]);
-  const [filteredData, setFilteredData] = useState([]);
   const [expandPanel, setExpandPanel] = useState([]);
   const [duplicateData, setDuplicateData] = useState([]);
   const [formData, setFormData] = useState({});
   const [isLoading, setIsLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
-  const formRef = React.createRef();
+  const formRef = useRef(null);
+  const tableWrapRef = useRef(null);
+  const dataRef = useRef([]);
+  const simActionRef = useRef({ deactivate: () => {}, reactivate: () => {} });
+  const [tableY, setTableY] = useState(480);
 
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [selectedDevices, setSelectedDevices] = useState([]);
   const [assignEmail, setAssignEmail] = useState("");
+  const [searchInput, setSearchInput] = useState("");
   const [searchText, setSearchText] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
+  const [selectedSerials, setSelectedSerials] = useState([]);
+  const [mobilePage, setMobilePage] = useState(1);
 
-  //table columns
-  const columns = [
-    {
-      title: "Serial",
-      dataIndex: "deviceSerial",
-      key: "deviceSerial",
-      clickable: true,
-      className: "link-column text-xs md:text-md",
-      sorter: (a, b) => (a.deviceSerial || "").localeCompare(b.deviceSerial || ""),
-
-      render: (text, record) => {
-        return (
+  // Stable column defs so virtualized rows are not remounted on each keystroke.
+  const columns = useMemo(
+    () => [
+      {
+        title: "Serial",
+        dataIndex: "deviceSerial",
+        key: "deviceSerial",
+        width: 128,
+        clickable: true,
+        className: "link-column text-xs md:text-md",
+        sorter: (a, b) =>
+          (a.deviceSerial || "").localeCompare(b.deviceSerial || ""),
+        render: (text) => (
           <a
             onClick={() => {
-              //setting form data
-              const _formData = data.find((d) => d.deviceSerial == text);
+              const _formData = dataRef.current.find(
+                (d) => d.deviceSerial == text
+              );
               setFormData(_formData);
-              formRef?.current?.setFieldsValue(_formData);
-
-              //expand panel
-              onExpandPanel(text);
+              formRef.current?.setFieldsValue(_formData);
+              setExpandPanel((prev) => (prev.length === 1 ? prev : [1]));
             }}
           >
             {text}
           </a>
-        );
+        ),
       },
-    },
-    {
-      title: "Email",
-      dataIndex: "email",
-      key: "email",
-      className: "text-xs md:text-md",
-      sorter: (a, b) => (a.email || "").localeCompare(b.email || ""),
-    },
-    {
-      title: "IMEI",
-      dataIndex: "imei",
-      key: "imei",
-      clickable: true,
-      className: "text-xs md:text-md",
-      sorter: (a, b) => (a.imei || "").localeCompare(b.imei || ""),
-    },
-    {
-      title: "ICCID",
-      dataIndex: "iccid",
-      key: "iccid",
-      className: "text-xs md:text-md",
-      sorter: (a, b) => (a.iccid || "").localeCompare(b.iccid || ""),
-    },
-    {
-      title: "Status",
-      dataIndex: "status",
-      key: "status",
-      className: "text-xs md:text-md",
-      sorter: (a, b) => (a.status || "").localeCompare(b.status || ""),
-    },
-    {
-      title: "Action",
-      key: "action",
-      className: "text-xs md:text-md",
-      render: (_, record) => {
-        const isDeactivated =
-          record?.simStatus === "DEACTIVATED" ||
-          record?.status === "DEACTIVATED";
+      {
+        title: "Email",
+        dataIndex: "email",
+        key: "email",
+        ellipsis: true,
+        className: "text-xs md:text-md",
+        sorter: (a, b) => (a.email || "").localeCompare(b.email || ""),
+      },
+      {
+        title: "IMEI",
+        dataIndex: "imei",
+        key: "imei",
+        width: 148,
+        clickable: true,
+        className: "text-xs md:text-md",
+        sorter: (a, b) => (a.imei || "").localeCompare(b.imei || ""),
+      },
+      {
+        title: "ICCID",
+        dataIndex: "iccid",
+        key: "iccid",
+        width: 188,
+        className: "text-xs md:text-md",
+        sorter: (a, b) => (a.iccid || "").localeCompare(b.iccid || ""),
+      },
+      {
+        title: "Status",
+        dataIndex: "status",
+        key: "status",
+        width: 168,
+        className: "text-xs md:text-md",
+        sorter: (a, b) => (a.status || "").localeCompare(b.status || ""),
+      },
+      {
+        title: "Action",
+        key: "action",
+        width: 118,
+        className: "text-xs md:text-md",
+        render: (_, record) => {
+          const isDeactivated = isDeviceDeactivated(record);
 
-        if (isDeactivated) {
+          if (isDeactivated) {
+            return (
+              <Button
+                size="small"
+                type="primary"
+                onClick={() =>
+                  simActionRef.current.reactivate(record?.deviceSerial)
+                }
+              >
+                Reactivate
+              </Button>
+            );
+          }
+
           return (
             <Button
               size="small"
-              type="primary"
-              onClick={() => handleReactivateDeviceSIM(record?.deviceSerial)}
+              danger
+              onClick={() =>
+                simActionRef.current.deactivate(record?.deviceSerial)
+              }
             >
-              Reactivate
+              Deactivate
             </Button>
           );
-        }
-
-        return (
-          <Button
-            size="small"
-            danger
-            onClick={() => handleDeactivateDeviceSIM(record?.deviceSerial)}
-          >
-            Deactivate
-          </Button>
-        );
+        },
       },
-    },
-  ];
+    ],
+    []
+  );
 
   const uploadSuccessful = () => {
     message.success("Data Uploaded Successfully");
@@ -174,7 +215,7 @@ const Home = () => {
   };
 
   const onFilterData = (text) => {
-    setSearchText(text || "");
+    setSearchInput(text || "");
   };
 
   const onStatusFilterChange = (value) => {
@@ -217,10 +258,9 @@ const Home = () => {
         };
       });
 
-      _data = [..._selectedDevices, ..._data];
+      _data = indexDevices([..._selectedDevices, ..._data]);
 
       setData(_data);
-      setFilteredData(_data);
 
       console.log(res);
     });
@@ -240,54 +280,73 @@ const Home = () => {
     return formData?.deviceSerial?.trim?.() || "";
   };
 
-  const handleDeactivateDeviceSIM = async (serialFromRow) => {
-    const selectedSerial = resolveDeviceSerial(serialFromRow);
+  const toggleSelectedSerial = (serial, checked) => {
+    if (!serial) return;
+    setSelectedSerials((prev) => {
+      if (checked) {
+        return prev.includes(serial) ? prev : [...prev, serial];
+      }
+      return prev.filter((item) => item !== serial);
+    });
+  };
 
-    if (!selectedSerial) {
-      message.error("Please select a device serial first");
+  const refreshDevicesAfterSimAction = async (touchedSerials = []) => {
+    const raw = await getAllDevices();
+    const list = Array.isArray(raw) ? raw : [];
+    const refreshedData = indexDevices(list);
+
+    setSearchInput("");
+    setSearchText("");
+    setStatusFilter("ALL");
+    setData(refreshedData);
+    setSelectedSerials([]);
+    setFormData((prev) => {
+      if (!prev?.deviceSerial || !touchedSerials.includes(prev.deviceSerial)) {
+        return prev;
+      }
+      const row = refreshedData.find((d) => d.deviceSerial === prev.deviceSerial);
+      return row ? { ...prev, ...row } : prev;
+    });
+  };
+
+  const runBulkSimAction = async (serials, mode) => {
+    const uniqueSerials = [...new Set((serials || []).map((s) => String(s || "").trim()).filter(Boolean))];
+    if (uniqueSerials.length === 0) {
+      message.error("Please select at least one device");
       return;
     }
 
+    const isDeactivate = mode === "deactivate";
+    const preview =
+      uniqueSerials.length <= 8
+        ? uniqueSerials.join(", ")
+        : `${uniqueSerials.slice(0, 8).join(", ")} … (+${uniqueSerials.length - 8} more)`;
+
     confirm({
-      title: "Are you sure?",
-      content: `Do you want to deactivate SIM for device ${selectedSerial}?`,
-      okText: "Yes, Deactivate",
+      title: isDeactivate ? "Deactivate device SIMs?" : "Reactivate device SIMs?",
+      content: `Do you want to ${isDeactivate ? "deactivate" : "reactivate"} ${uniqueSerials.length} device(s)? ${preview}`,
+      okText: isDeactivate ? "Yes, Deactivate" : "Yes, Reactivate",
       cancelText: "Cancel",
-      okType: "danger",
+      okType: isDeactivate ? "danger" : "primary",
       onOk: async () => {
         try {
           setIsLoading(true);
-          const result = await deactivateDeviceSIM([selectedSerial]);
+          const result = isDeactivate
+            ? await deactivateDeviceSIM(uniqueSerials)
+            : await reactivateDeviceSIM(uniqueSerials);
           if (!result?.success) {
             message.error(
               result?.message ||
                 result?.warning ||
-                `Failed to deactivate SIM for ${selectedSerial}`
+                `Failed to ${isDeactivate ? "deactivate" : "reactivate"} selected SIMs`
             );
             return;
           }
           message.success(
-            result.message || `SIM deactivated for ${selectedSerial}`
+            result.message ||
+              `SIM ${isDeactivate ? "deactivated" : "reactivated"} for ${uniqueSerials.length} device(s)`
           );
-
-          const raw = await getAllDevices();
-          const list = Array.isArray(raw) ? raw : [];
-          const refreshedData = list.map((d) => ({
-            ...d,
-            key: d.deviceSerial,
-          }));
-
-          // Narrow filters (e.g. INSTALLATION_PENDING) would hide the newly deactivated row.
-          setSearchText("");
-          setStatusFilter("ALL");
-          setData(refreshedData);
-          setFormData((prev) => {
-            if (prev?.deviceSerial !== selectedSerial) return prev;
-            const row = refreshedData.find(
-              (d) => d.deviceSerial === selectedSerial
-            );
-            return row ? { ...prev, ...row } : prev;
-          });
+          await refreshDevicesAfterSimAction(uniqueSerials);
         } catch (error) {
           if (
             error?.response?.status === 401 ||
@@ -298,7 +357,7 @@ const Home = () => {
             message.error(
               error?.response?.data?.message ||
                 error?.response?.data?.warning ||
-                "Failed to deactivate device SIM"
+                `Failed to ${isDeactivate ? "deactivate" : "reactivate"} device SIM`
             );
           }
         } finally {
@@ -308,72 +367,58 @@ const Home = () => {
     });
   };
 
-  const handleReactivateDeviceSIM = async (serialFromRow) => {
+  const handleDeactivateDeviceSIM = async (serialFromRow) => {
     const selectedSerial = resolveDeviceSerial(serialFromRow);
-
     if (!selectedSerial) {
       message.error("Please select a device serial first");
       return;
     }
+    await runBulkSimAction([selectedSerial], "deactivate");
+  };
 
-    confirm({
-      title: "Reactivate device?",
-      content: `Do you want to reactivate SIM for device ${selectedSerial}?`,
-      okText: "Yes, Reactivate",
-      cancelText: "Cancel",
-      onOk: async () => {
-        try {
-          setIsLoading(true);
-          const result = await reactivateDeviceSIM([selectedSerial]);
-          if (!result?.success) {
-            message.error(
-              result?.message ||
-                result?.warning ||
-                `Failed to reactivate SIM for ${selectedSerial}`
-            );
-            return;
-          }
-          message.success(
-            result.message || `SIM reactivated for ${selectedSerial}`
-          );
+  const handleReactivateDeviceSIM = async (serialFromRow) => {
+    const selectedSerial = resolveDeviceSerial(serialFromRow);
+    if (!selectedSerial) {
+      message.error("Please select a device serial first");
+      return;
+    }
+    await runBulkSimAction([selectedSerial], "reactivate");
+  };
 
-          const raw = await getAllDevices();
-          const list = Array.isArray(raw) ? raw : [];
-          const refreshedData = list.map((d) => ({
-            ...d,
-            key: d.deviceSerial,
-          }));
+  dataRef.current = data;
+  simActionRef.current = {
+    deactivate: handleDeactivateDeviceSIM,
+    reactivate: handleReactivateDeviceSIM,
+  };
 
-          // Reactivated rows leave statuses like DEACTIVATED; prior status filter would hide them
-          // and the table looked "empty" or a single row. Show the full list again.
-          setSearchText("");
-          setStatusFilter("ALL");
-          setData(refreshedData);
-          setFormData((prev) => {
-            if (prev?.deviceSerial !== selectedSerial) return prev;
-            const row = refreshedData.find(
-              (d) => d.deviceSerial === selectedSerial
-            );
-            return row ? { ...prev, ...row } : prev;
-          });
-        } catch (error) {
-          if (
-            error?.response?.status === 401 ||
-            error?.message?.includes("missing JWT token")
-          ) {
-            message.error("Unauthorized. Please login again.");
-          } else {
-            message.error(
-              error?.response?.data?.message ||
-                error?.response?.data?.warning ||
-                "Failed to reactivate device SIM"
-            );
-          }
-        } finally {
-          setIsLoading(false);
-        }
-      },
-    });
+  const handleBulkDeactivateSelected = () => {
+    const targets = data.filter(
+      (d) =>
+        selectedSerials.includes(d.deviceSerial) && !isDeviceDeactivated(d)
+    );
+    if (targets.length === 0) {
+      message.error("Select one or more active devices to deactivate");
+      return;
+    }
+    runBulkSimAction(
+      targets.map((d) => d.deviceSerial),
+      "deactivate"
+    );
+  };
+
+  const handleBulkReactivateSelected = () => {
+    const targets = data.filter(
+      (d) =>
+        selectedSerials.includes(d.deviceSerial) && isDeviceDeactivated(d)
+    );
+    if (targets.length === 0) {
+      message.error("Select one or more deactivated devices to reactivate");
+      return;
+    }
+    runBulkSimAction(
+      targets.map((d) => d.deviceSerial),
+      "reactivate"
+    );
   };
 
   const handleFileUpload = async (e) => {
@@ -425,8 +470,7 @@ const Home = () => {
           _newData = [_item, ..._newData];
 
           uploadSuccessful();
-          setData(_newData);
-          setFilteredData(_newData);
+          setData(indexDevices(_newData));
 
           // getAllDevices().then((allData) => {
 
@@ -449,14 +493,7 @@ const Home = () => {
       setInitialLoading(true);
       try {
         const res = await getAllDevices();
-        const newData = res?.map((d) => {
-          return {
-            ...d,
-            key: d.deviceSerial,
-          };
-        });
-        setData(newData);
-        setFilteredData(newData);
+        setData(indexDevices(Array.isArray(res) ? res : []));
         setFormData({
           deviceSerial: "",
           imei: "",
@@ -471,19 +508,112 @@ const Home = () => {
   }, []);
 
   useEffect(() => {
-    setFilteredData(filterDevices(data, searchText, statusFilter));
-  }, [data, searchText, statusFilter]);
+    const timer = setTimeout(() => {
+      setSearchText(searchInput);
+    }, SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
+
+  useEffect(() => {
+    setMobilePage(1);
+  }, [searchText, statusFilter]);
+
+  const filteredData = useMemo(
+    () => filterDevices(data, searchText, statusFilter),
+    [data, searchText, statusFilter]
+  );
+
+  const deviceSelectOptions = useMemo(
+    () =>
+      (data || []).map((device) => ({
+        value: device.deviceSerial,
+        label: device.deviceSerial,
+      })),
+    [data]
+  );
 
   const totalDeviceCount = data?.length || 0;
   const visibleDeviceCount = filteredData?.length || 0;
-  const availableStatuses = [
-    "ALL",
-    ...new Set(
-      (data || [])
-        .map((d) => d?.simStatus || d?.status)
-        .filter((status) => !!status)
-    ),
-  ];
+  const visibleSerials = useMemo(
+    () => (filteredData || []).map((d) => d?.deviceSerial).filter(Boolean),
+    [filteredData]
+  );
+  const selectedSerialSet = useMemo(
+    () => new Set(selectedSerials),
+    [selectedSerials]
+  );
+  const allVisibleSelected =
+    visibleSerials.length > 0 &&
+    visibleSerials.every((serial) => selectedSerialSet.has(serial));
+  const { selectedActiveCount, selectedDeactivatedCount } = useMemo(() => {
+    let active = 0;
+    let deactivated = 0;
+    for (const d of data || []) {
+      if (!selectedSerialSet.has(d.deviceSerial)) continue;
+      if (isDeviceDeactivated(d)) deactivated += 1;
+      else active += 1;
+    }
+    return {
+      selectedActiveCount: active,
+      selectedDeactivatedCount: deactivated,
+    };
+  }, [data, selectedSerialSet]);
+  const availableStatuses = useMemo(
+    () => [
+      "ALL",
+      ...new Set(
+        (data || [])
+          .map((d) => d?.simStatus || d?.status)
+          .filter((status) => !!status)
+      ),
+    ],
+    [data]
+  );
+  const mobilePageItems = useMemo(() => {
+    const start = (mobilePage - 1) * MOBILE_PAGE_SIZE;
+    return filteredData.slice(start, start + MOBILE_PAGE_SIZE);
+  }, [filteredData, mobilePage]);
+
+  useEffect(() => {
+    if (!isDesktop || initialLoading || filteredData.length === 0) return;
+    const el = tableWrapRef.current;
+    if (!el) return;
+
+    const update = () => {
+      const next = Math.floor(el.clientHeight);
+      setTableY((prev) => (next >= 160 && next !== prev ? next : prev));
+    };
+
+    update();
+    const ro =
+      typeof ResizeObserver !== "undefined" ? new ResizeObserver(update) : null;
+    ro?.observe(el);
+    window.addEventListener("resize", update);
+    return () => {
+      ro?.disconnect();
+      window.removeEventListener("resize", update);
+    };
+  }, [isDesktop, initialLoading, filteredData.length === 0]);
+
+  const toggleSelectAllVisible = (checked) => {
+    setSelectedSerials((prev) => {
+      if (checked) {
+        return [...new Set([...prev, ...visibleSerials])];
+      }
+      return prev.filter((serial) => !visibleSerials.includes(serial));
+    });
+  };
+
+  const rowSelection = useMemo(
+    () => ({
+      columnWidth: SELECTION_COL_WIDTH,
+      selectedRowKeys: selectedSerials,
+      preserveSelectedRowKeys: true,
+      onChange: (keys) =>
+        setSelectedSerials((keys || []).map(String).filter(Boolean)),
+    }),
+    [selectedSerials]
+  );
 
   const renderDeviceCards = (items) => (
     <div className="grid grid-cols-1 gap-4">
@@ -512,6 +642,16 @@ const Home = () => {
             ]}
             actions={
               <>
+                <Checkbox
+                  checked={selectedSerialSet.has(record.deviceSerial)}
+                  onClick={(e) => e.stopPropagation()}
+                  onChange={(e) => {
+                    e.stopPropagation();
+                    toggleSelectedSerial(record.deviceSerial, e.target.checked);
+                  }}
+                >
+                  Select
+                </Checkbox>
                 {isDeactivated ? (
                   <Button
                     type="primary"
@@ -546,8 +686,7 @@ const Home = () => {
   return (
     <div>
       {isLoading && <LoadingSpinner message="Loading devices..." />}
-      {!isLoading && (
-        <PageContainer title={`Device Table (${visibleDeviceCount}/${totalDeviceCount})`}>
+      <PageContainer title={`Device Table (${visibleDeviceCount}/${totalDeviceCount})`}>
             <Collapse
               className="bg-indigo-50 mb-3 sm:min-h-[30px] overflow-auto"
               size="small"
@@ -662,10 +801,14 @@ const Home = () => {
                         {isDesktop ? (
                           <Table
                             size="small"
+                            tableLayout="fixed"
+                            className="device-table"
+                            rowKey="deviceSerial"
+                            rowSelection={rowSelection}
                             dataSource={duplicateData}
                             columns={columns}
                             pagination={false}
-                            scroll={{ y: 180, x: "max-content" }}
+                            scroll={{ y: 180, x: TABLE_X }}
                           />
                         ) : (
                           renderDeviceCards(duplicateData)
@@ -678,12 +821,13 @@ const Home = () => {
             )}
 
             {/* Table Container - Ensure it grows and doesn't overflow */}
-            <div className="flex-grow min-h-0 overflow-auto">
+            <div className="flex flex-col flex-grow min-h-0">
               <hr className="border-indigo-200" />
-              <div className="mt-3 mb-3 flex flex-col sm:flex-row gap-2 sm:gap-3">
+              <div className="mt-3 mb-3 flex flex-col sm:flex-row gap-2 sm:gap-3 shrink-0">
                 <Search
                   className="w-full"
-                  placeholder="input search text"
+                  placeholder="Search serial, IMEI, ICCID, email, VIN..."
+                  value={searchInput}
                   onSearch={(value) => onFilterData(value)}
                   allowClear
                   onChange={(e) => onFilterData(e.target.value)}
@@ -700,6 +844,49 @@ const Home = () => {
                   ))}
                 </Select>
               </div>
+              <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center shrink-0">
+                <Checkbox
+                  checked={allVisibleSelected}
+                  indeterminate={
+                    !allVisibleSelected &&
+                    visibleSerials.some((serial) =>
+                      selectedSerialSet.has(serial)
+                    )
+                  }
+                  disabled={visibleSerials.length === 0}
+                  onChange={(e) => toggleSelectAllVisible(e.target.checked)}
+                >
+                  Select visible ({visibleDeviceCount})
+                </Checkbox>
+                <span className="text-sm text-gray-600">
+                  {selectedSerials.length} selected
+                  {selectedSerials.length > 0
+                    ? ` · ${selectedActiveCount} active · ${selectedDeactivatedCount} deactivated`
+                    : ""}
+                </span>
+                <div className="flex flex-wrap gap-2 sm:ml-auto">
+                  <Button
+                    danger
+                    disabled={selectedActiveCount === 0}
+                    onClick={handleBulkDeactivateSelected}
+                  >
+                    Deactivate selected ({selectedActiveCount})
+                  </Button>
+                  <Button
+                    type="primary"
+                    disabled={selectedDeactivatedCount === 0}
+                    onClick={handleBulkReactivateSelected}
+                  >
+                    Reactivate selected ({selectedDeactivatedCount})
+                  </Button>
+                  <Button
+                    disabled={selectedSerials.length === 0}
+                    onClick={() => setSelectedSerials([])}
+                  >
+                    Clear selection
+                  </Button>
+                </div>
+              </div>
               {initialLoading ? (
                 <Skeleton active />
               ) : filteredData.length === 0 ? (
@@ -707,15 +894,36 @@ const Home = () => {
                   No devices found.
                 </div>
               ) : isDesktop ? (
-                <Table
-                  size="small"
-                  dataSource={filteredData}
-                  columns={columns}
-                  pagination={false}
-                  scroll={tableScroll}
-                />
+                <div ref={tableWrapRef} className="flex-1 min-h-[20rem]">
+                  <Table
+                    size="small"
+                    virtual
+                    tableLayout="fixed"
+                    className="device-table"
+                    rowKey="deviceSerial"
+                    rowSelection={rowSelection}
+                    dataSource={filteredData}
+                    columns={columns}
+                    pagination={false}
+                    scroll={{ x: TABLE_X, y: tableY }}
+                  />
+                </div>
               ) : (
-                renderDeviceCards(filteredData)
+                <>
+                  {renderDeviceCards(mobilePageItems)}
+                  {filteredData.length > MOBILE_PAGE_SIZE && (
+                    <div className="mt-3 flex justify-center">
+                      <Pagination
+                        current={mobilePage}
+                        pageSize={MOBILE_PAGE_SIZE}
+                        total={filteredData.length}
+                        onChange={setMobilePage}
+                        showSizeChanger={false}
+                        size="small"
+                      />
+                    </div>
+                  )}
+                </>
               )}
 
               {/* <table className="min-w-full divide-y divide-gray-200">
@@ -798,17 +1006,11 @@ const Home = () => {
                   value={selectedDevices}
                   onChange={setSelectedDevices}
                   style={{ width: "100%" }}
-                  optionFilterProp="children"
-                >
-                  {data.map((device) => (
-                    <Option
-                      key={device.deviceSerial}
-                      value={device.deviceSerial}
-                    >
-                      {device.deviceSerial}
-                    </Option>
-                  ))}
-                </Select>
+                  options={deviceSelectOptions}
+                  optionFilterProp="label"
+                  showSearch
+                  maxTagCount="responsive"
+                />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -821,8 +1023,7 @@ const Home = () => {
                 />
               </div>
             </Modal>
-        </PageContainer>
-      )}
+      </PageContainer>
     </div>
   );
 };

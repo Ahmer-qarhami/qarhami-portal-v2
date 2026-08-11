@@ -79,3 +79,11 @@ body {
 .link-column {
   @apply text-indigo-500;
 }
+
+.device-table .ant-table-selection-column {
+  width: 48px !important;
+  min-width: 48px !important;
+  max-width: 48px !important;
+  padding-left: 8px !important;
+  padding-right: 8px !important;
+}
