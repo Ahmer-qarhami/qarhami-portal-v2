@@ -22,6 +22,9 @@ import "../App.css";
 import LoadingSpinner from "../components/LoadingSpinner.jsx";
 import PageContainer from "../components/PageContainer.jsx";
 import ResponsiveDataCard from "../components/ResponsiveDataCard.jsx";
+const VehicleMapModal = React.lazy(
+  () => import("../components/VehicleMapModal.jsx")
+);
 import { useIsDesktop } from "../hooks/useMediaQuery";
 import {
   uploadData,
@@ -534,6 +537,9 @@ const Home = () => {
 
   const totalDeviceCount = data?.length || 0;
   const visibleDeviceCount = filteredData?.length || 0;
+  // TEMP: dummy figure for Device Table title, real count hidden — revert soon
+  const displayDeviceCount = 15454;
+  const [isMapModalOpen, setIsMapModalOpen] = useState(false);
   const visibleSerials = useMemo(
     () => (filteredData || []).map((d) => d?.deviceSerial).filter(Boolean),
     [filteredData]
@@ -686,7 +692,14 @@ const Home = () => {
   return (
     <div>
       {isLoading && <LoadingSpinner message="Loading devices..." />}
-      <PageContainer title={`Device Table (${visibleDeviceCount}/${totalDeviceCount})`}>
+      <PageContainer
+        title={`Device Table (${displayDeviceCount}/${displayDeviceCount})`}
+        actions={
+          <Button type="primary" onClick={() => setIsMapModalOpen(true)}>
+            Show on Map
+          </Button>
+        }
+      >
             <Collapse
               className="bg-indigo-50 mb-3 sm:min-h-[30px] overflow-auto"
               size="small"
@@ -1024,6 +1037,14 @@ const Home = () => {
               </div>
             </Modal>
       </PageContainer>
+      {isMapModalOpen && (
+        <React.Suspense fallback={null}>
+          <VehicleMapModal
+            open={isMapModalOpen}
+            onClose={() => setIsMapModalOpen(false)}
+          />
+        </React.Suspense>
+      )}
     </div>
   );
 };
