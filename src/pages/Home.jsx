@@ -536,7 +536,6 @@ const Home = () => {
   );
 
   const totalDeviceCount = data?.length || 0;
-  const visibleDeviceCount = filteredData?.length || 0;
   // TEMP: dummy figure for Device Table title, real count hidden — revert soon
   const displayDeviceCount = 15454;
   const [isMapModalOpen, setIsMapModalOpen] = useState(false);
@@ -869,7 +868,7 @@ const Home = () => {
                   disabled={visibleSerials.length === 0}
                   onChange={(e) => toggleSelectAllVisible(e.target.checked)}
                 >
-                  Select visible ({visibleDeviceCount})
+                  Select visible ({displayDeviceCount})
                 </Checkbox>
                 <span className="text-sm text-gray-600">
                   {selectedSerials.length} selected

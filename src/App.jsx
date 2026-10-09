@@ -234,6 +234,25 @@ const App = () => {
   }, []);
 
   useEffect(() => {
+    // Older builds' "Update Version" button lands here via ?_v=...&_t=...; the
+    // plain URLs are still cached with the old index.html, so the next normal
+    // visit would load the old build and show the prompt again. Refresh those
+    // cached pages and drop the cache-busting params from the address bar.
+    const params = new URLSearchParams(window.location.search);
+    if (!params.has("_v")) return;
+    const paths = new Set([window.location.pathname, "/", "/home", "/login"]);
+    paths.forEach((p) => fetch(p, { cache: "reload" }).catch(() => {}));
+    params.delete("_v");
+    params.delete("_t");
+    const query = params.toString();
+    window.history.replaceState(
+      window.history.state,
+      "",
+      `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`
+    );
+  }, []);
+
+  useEffect(() => {
     const RELOAD_GUARD_KEY = "portal_chunk_reload_attempt_at";
     const RELOAD_GUARD_MS = 30000; // prevent reload loops for 30s window
 
@@ -316,12 +335,25 @@ const App = () => {
     };
   }, [isAuthenticated, appVersion]);
 
-  const handleHotReload = () => {
-    const baseUrl = `${window.location.origin}${window.location.pathname}`;
-    const cacheBuster = `?_v=${encodeURIComponent(
-      availableVersion || appVersion
-    )}&_t=${Date.now()}`;
-    window.location.assign(`${baseUrl}${cacheBuster}`);
+  // A cache-busting URL alone didn't stick: the next plain visit to the same
+  // path got the stale index.html again (from a service worker or the browser's
+  // heuristic HTTP cache), so the prompt kept coming back. Drop SWs/caches and
+  // overwrite the cached HTML for this path before reloading it.
+  const handleHotReload = async () => {
+    try {
+      if ("serviceWorker" in navigator) {
+        const registrations = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(registrations.map((r) => r.unregister()));
+      }
+      if ("caches" in window) {
+        const cacheKeys = await caches.keys();
+        await Promise.all(cacheKeys.map((key) => caches.delete(key)));
+      }
+      await fetch(window.location.pathname, { cache: "reload" });
+    } catch {
+      // Still reload below even if cleanup fails.
+    }
+    window.location.reload();
   };
 
   if (loading) {

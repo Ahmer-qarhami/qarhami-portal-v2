@@ -9,11 +9,11 @@ mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN;
 
 // TEMP: dummy vehicle demo — static positions only, no live tracking. Revert soon.
 
-const TOTAL_VEHICLES = 3000;
+const TOTAL_VEHICLES = 10000;
 
 // Metro hubs across the US. Each hub's vehicles spread over its whole metro
 // (radius in degrees of latitude) so pins look like a real fleet instead of
-// dense blobs. Houston carries the most weight. `water` rejects points that
+// dense blobs. `water` rejects points that
 // would land in a bay, lake, ocean or across a border near that metro.
 const US_HUBS = [
   {
@@ -21,7 +21,7 @@ const US_HUBS = [
     lat: 29.76,
     lng: -95.37,
     radius: 0.75,
-    weight: 0.2,
+    weight: 0.06,
     water: (lat, lng) =>
       (lat < 29.7 && lng > -95.01) || // Galveston Bay
       (lat < 29.8 && lng > -94.93) || // Trinity Bay
@@ -471,6 +471,37 @@ function fallbackMarker(color) {
   return ctx.getImageData(0, 0, size, size);
 }
 
+class FastNavigationControl extends mapboxgl.NavigationControl {
+  onAdd(map) {
+    const container = super.onAdd(map);
+    this.mapForFastZoom = map;
+    this.zoomInButton = container.querySelector(".mapboxgl-ctrl-zoom-in");
+    this.zoomOutButton = container.querySelector(".mapboxgl-ctrl-zoom-out");
+    this.zoomInButton?.addEventListener("click", this.handleZoomIn, true);
+    this.zoomOutButton?.addEventListener("click", this.handleZoomOut, true);
+    return container;
+  }
+
+  onRemove() {
+    this.zoomInButton?.removeEventListener("click", this.handleZoomIn, true);
+    this.zoomOutButton?.removeEventListener("click", this.handleZoomOut, true);
+    this.mapForFastZoom = null;
+    super.onRemove();
+  }
+
+  handleZoomIn = (event) => {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    this.mapForFastZoom.zoomIn({ duration: 150 });
+  };
+
+  handleZoomOut = (event) => {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    this.mapForFastZoom.zoomOut({ duration: 150 });
+  };
+}
+
 // Source, layers and marker assets mirror app.qarhami.com's dashboard map
 // (app.qarhami-v2.2/src/Components/Map/MapV3.jsx) so the look matches 1:1.
 function addVehicleLayers(map, geojson) {
@@ -504,46 +535,14 @@ function addVehicleLayers(map, geojson) {
       map.addSource(SOURCE_ID, {
         type: "geojson",
         data: geojson,
-        cluster: true,
-        clusterMaxZoom: 15,
-        // Production uses 26 for small fleets; with 12k cars that fills the
-        // screen with tiny clusters, so group more aggressively.
-        clusterRadius: 60,
-      });
-
-      map.addLayer({
-        id: "clusters",
-        type: "circle",
-        source: SOURCE_ID,
-        filter: ["has", "point_count"],
-        paint: {
-          "circle-color": "#5933E5",
-          "circle-radius": 20,
-        },
-      });
-
-      map.addLayer({
-        id: "cluster-count",
-        type: "symbol",
-        source: SOURCE_ID,
-        filter: ["has", "point_count"],
-        layout: {
-          "text-field": "{point_count_abbreviated}",
-          "text-font": ["DIN Offc Pro Medium", "Arial Unicode MS Bold"],
-          "text-size": 14,
-          "text-allow-overlap": true,
-          "text-ignore-placement": true,
-        },
-        paint: {
-          "text-color": "#ffffff",
-        },
+        cluster: false,
+        maxzoom: 14,
       });
 
       map.addLayer({
         id: "unclustered-point",
         type: "symbol",
         source: SOURCE_ID,
-        filter: ["!", ["has", "point_count"]],
         layout: {
           "icon-image": [
             "case",
@@ -561,7 +560,7 @@ function addVehicleLayers(map, geojson) {
         id: "vehicle-labels",
         type: "symbol",
         source: SOURCE_ID,
-        filter: ["!", ["has", "point_count"]],
+        minzoom: 17,
         layout: {
           "text-field": [
             "format",
@@ -591,7 +590,8 @@ function addVehicleLayers(map, geojson) {
         id: "speed-label",
         type: "symbol",
         source: SOURCE_ID,
-        filter: ["!", ["has", "point_count"]],
+        minzoom: 17,
+        filter: ["==", ["get", "ignitionStatus"], "ON"],
         layout: {
           "text-field": ["concat", ["to-string", ["get", "speed"]]],
           "text-font": ["Open Sans Semibold", "Arial Unicode MS Bold"],
@@ -608,33 +608,11 @@ function addVehicleLayers(map, geojson) {
         },
       });
 
-      map.on("mouseenter", "clusters", () => {
-        map.getCanvas().style.cursor = "pointer";
-      });
-      map.on("mouseleave", "clusters", () => {
-        map.getCanvas().style.cursor = "";
-      });
       map.on("mouseenter", "unclustered-point", () => {
         map.getCanvas().style.cursor = "pointer";
       });
       map.on("mouseleave", "unclustered-point", () => {
         map.getCanvas().style.cursor = "";
-      });
-
-      map.on("click", "clusters", (e) => {
-        const features = map.queryRenderedFeatures(e.point, {
-          layers: ["clusters"],
-        });
-        const clusterId = features[0].properties.cluster_id;
-        map
-          .getSource(SOURCE_ID)
-          .getClusterExpansionZoom(clusterId, (err, zoom) => {
-            if (err) return;
-            map.easeTo({
-              center: features[0].geometry.coordinates,
-              zoom,
-            });
-          });
       });
 
       map.on("click", "unclustered-point", (e) => {
@@ -691,11 +669,13 @@ const VehicleMapModal = ({ open, onClose }) => {
     const map = new mapboxgl.Map({
       container: mapContainerRef.current,
       style: mapStyle,
-      center: [-95.3698, 29.7604], // Houston, TX — vehicles also spread nationwide, visible by zooming out
-      zoom: 8.2,
+      center: [-95.3698, 29.7604], // Downtown Houston
+      zoom: 13.5,
+      crossSourceCollisions: false,
+      fadeDuration: 0,
     });
     mapRef.current = map;
-    map.addControl(new mapboxgl.NavigationControl(), "bottom-right");
+    map.addControl(new FastNavigationControl(), "bottom-right");
 
     map.on("load", () => addVehicleLayers(map, geojson));
 

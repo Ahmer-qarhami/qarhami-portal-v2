@@ -8,6 +8,10 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
+      // The precaching SW served a stale index.html for every navigation, so
+      // users on an old build hit the "New Version Released" prompt in a loop.
+      // Ship a self-destroying SW that unregisters itself and clears caches.
+      selfDestroying: true,
       registerType: "autoUpdate",
       workbox: {
         cleanupOutdatedCaches: true, // Clean old caches

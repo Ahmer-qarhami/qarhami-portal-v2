@@ -29,6 +29,7 @@ const uploadAttachments = async (files) => {
     response = await fetch(uploadUrl, {
       method: "POST",
       body: formData,
+      headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
     });
   } catch (error) {
     if (error instanceof TypeError) {
