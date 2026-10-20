@@ -131,6 +131,21 @@ const updateFreeTrialStatus = async (body) => {
     });
 };
 
+const getVehiclePositions = async () => {
+  let token = getToken();
+  return await axios
+    .get(`${API_URL}/user-accounts/getVehiclePositions`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    })
+    .then((res) => res?.data)
+    .catch((err) => {
+      console.log(err);
+      throw err;
+    });
+};
+
 const cancelSubscription = async (body) => {
   let token = getToken();
   return await axios
@@ -499,6 +514,7 @@ export {
   getDataByEmail,
   updateFreeTrialStatus,
   cancelSubscription,
+  getVehiclePositions,
   undoCancelSubscription,
   getAllActiveDevices,
   createVersion,

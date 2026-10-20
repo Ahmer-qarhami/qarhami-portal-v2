@@ -536,8 +536,7 @@ const Home = () => {
   );
 
   const totalDeviceCount = data?.length || 0;
-  // TEMP: dummy figure for Device Table title, real count hidden — revert soon
-  const displayDeviceCount = 15454;
+  const visibleDeviceCount = filteredData?.length || 0;
   const [isMapModalOpen, setIsMapModalOpen] = useState(false);
   const visibleSerials = useMemo(
     () => (filteredData || []).map((d) => d?.deviceSerial).filter(Boolean),
@@ -692,7 +691,7 @@ const Home = () => {
     <div>
       {isLoading && <LoadingSpinner message="Loading devices..." />}
       <PageContainer
-        title={`Device Table (${displayDeviceCount}/${displayDeviceCount})`}
+        title={`Device Table (${visibleDeviceCount}/${totalDeviceCount})`}
         actions={
           <Button type="primary" onClick={() => setIsMapModalOpen(true)}>
             Show on Map
@@ -868,7 +867,7 @@ const Home = () => {
                   disabled={visibleSerials.length === 0}
                   onChange={(e) => toggleSelectAllVisible(e.target.checked)}
                 >
-                  Select visible ({displayDeviceCount})
+                  Select visible ({visibleDeviceCount})
                 </Checkbox>
                 <span className="text-sm text-gray-600">
                   {selectedSerials.length} selected

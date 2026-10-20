@@ -86,45 +86,62 @@ const Management = () => {
       setData(merge(data));
       setFilteredData(merge(filteredData));
       setDuplicateData((prev) => merge(prev));
-      message.success("Subscription cancellation undone");
+      message.success("Subscription pause undone");
     } catch (err) {
       const apiMsg =
         err?.response?.data?.message ||
         err?.response?.data?.error ||
         err?.message;
-      message.error(apiMsg || "Failed to undo cancellation");
+      message.error(apiMsg || "Failed to undo pause");
     } finally {
       setUndoingSerial(null);
     }
   };
 
-  const handleCancelSubscription = async (record) => {
-    debugger;
+  // Cancel subscription
+  // isPaused: true = temporary pause, false = permanent cancellation
+  const handleCancelSubscription = async (record, isPaused) => {
     const email = record.email || formData.email;
     if (!email) {
       message.error(
-        "Email is required. Enter it above and use Get Data before canceling.",
+        "Email is required. Enter it above and use Get Data before pausing.",
       );
       return;
     }
     try {
       setCancellingSerial(record.deviceSerial);
-      await cancelSubscription({ email, deviceSerial: record.deviceSerial });
-      const patch = { ...record, subscriptionStatus: "CANCEL_PENDING" };
+      await cancelSubscription({
+        email,
+        deviceSerial: record.deviceSerial,
+        isPaused,
+      });
+      const patch = {
+        ...record,
+        subscriptionStatus: "CANCEL_PENDING",
+        isPaused,
+      };
+      // Permanent cancellation removes the vehicle; pause only updates its status
       const merge = (rows) =>
-        rows.map((row) =>
-          row.deviceSerial === record.deviceSerial ? { ...row, ...patch } : row,
-        );
+        isPaused
+          ? rows.map((row) =>
+              row.deviceSerial === record.deviceSerial
+                ? { ...row, ...patch }
+                : row,
+            )
+          : rows.filter((row) => row.deviceSerial !== record.deviceSerial);
       setData(merge(data));
       setFilteredData(merge(filteredData));
       setDuplicateData((prev) => merge(prev));
-      message.success("Subscription canceled");
+      message.success(`Subscription ${isPaused ? "paused" : "cancelled"}`);
     } catch (err) {
       const apiMsg =
         err?.response?.data?.message ||
         err?.response?.data?.error ||
         err?.message;
-      message.error(apiMsg || "Failed to cancel subscription");
+      message.error(apiMsg ||
+          (isPaused
+            ? "Failed to pause subscription"
+            : "Failed to cancel subscription"));
     } finally {
       setCancellingSerial(null);
     }
@@ -138,7 +155,8 @@ const Management = () => {
       key: "deviceSerial",
       clickable: true,
       className: "link-column text-xs md:text-md",
-      sorter: (a, b) => (a.deviceSerial || "").localeCompare(b.deviceSerial || ""),
+      sorter: (a, b) =>
+        (a.deviceSerial || "").localeCompare(b.deviceSerial || ""),
 
       render: (text, record) => {
         return (
@@ -182,7 +200,8 @@ const Management = () => {
       dataIndex: "subscriptionStatus",
       key: "subscriptionStatus",
       className: "text-xs md:text-md",
-      sorter: (a, b) => (a.subscriptionStatus || "").localeCompare(b.subscriptionStatus || ""),
+      sorter: (a, b) =>
+        (a.subscriptionStatus || "").localeCompare(b.subscriptionStatus || ""),
     },
     {
       title: "Free Trial Expiry",
@@ -215,15 +234,32 @@ const Management = () => {
           <div className="flex flex-wrap items-center gap-1">
             {disabled ? (
               <Button type="link" danger size="small" disabled>
+                Pause
+              </Button>
+            ) : (
+              <Popconfirm
+                title="Pause subscription?"
+                description="This will pause the subscription for this vehicle."
+                okText="Yes, pause"
+                cancelText="No"
+                onConfirm={() => handleCancelSubscription(record, true)}
+              >
+                <Button type="link" danger size="small" loading={loading}>
+                  Pause
+                </Button>
+              </Popconfirm>
+            )}
+            {disabled ? (
+              <Button type="link" danger size="small" disabled>
                 Cancel
               </Button>
             ) : (
               <Popconfirm
                 title="Cancel subscription?"
-                description="This will cancel the subscription for this vehicle."
+                description="This will permanently cancel the subscription and remove this vehicle."
                 okText="Yes, cancel"
                 cancelText="No"
-                onConfirm={() => handleCancelSubscription(record)}
+                onConfirm={() => handleCancelSubscription(record, false)}
               >
                 <Button type="link" danger size="small" loading={loading}>
                   Cancel
@@ -232,14 +268,14 @@ const Management = () => {
             )}
             {showUndoCancel && (
               <Popconfirm
-                title="Undo cancellation?"
+                title="Undo pause?"
                 description="This will restore the subscription for this vehicle."
                 okText="Yes, undo"
                 cancelText="No"
                 onConfirm={() => handleUndoCancelSubscription(record)}
               >
                 <Button type="link" size="small" loading={undoLoading}>
-                  Undo Cancel
+                  Undo Pause
                 </Button>
               </Popconfirm>
             )}
@@ -385,18 +421,43 @@ const Management = () => {
             onClick={() => openRecord(record)}
             rows={[
               { label: "Email", value: record.email || "-" },
-              { label: "Free Trial Expiry", value: formatDate(record.freeTrialEndDate) },
+              {
+                label: "Free Trial Expiry",
+                value: formatDate(record.freeTrialEndDate),
+              },
               { label: "Billing Date", value: formatDate(record.billingDate) },
             ]}
             actions={
               <>
                 {!cancelled ? (
                   <Popconfirm
+                    title="Pause subscription?"
+                    description="This will pause the subscription for this vehicle."
+                    okText="Yes, pause"
+                    cancelText="No"
+                    onConfirm={() => handleCancelSubscription(record, true)}
+                  >
+                    <Button
+                      danger
+                      size="small"
+                      loading={loading}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      Pause
+                    </Button>
+                  </Popconfirm>
+                ) : (
+                  <Button danger size="small" disabled>
+                    Pause
+                  </Button>
+                )}
+                {!cancelled ? (
+                  <Popconfirm
                     title="Cancel subscription?"
-                    description="This will cancel the subscription for this vehicle."
+                    description="This will permanently cancel the subscription and remove this vehicle."
                     okText="Yes, cancel"
                     cancelText="No"
-                    onConfirm={() => handleCancelSubscription(record)}
+                    onConfirm={() => handleCancelSubscription(record, false)}
                   >
                     <Button
                       danger
@@ -414,7 +475,7 @@ const Management = () => {
                 )}
                 {showUndoCancel ? (
                   <Popconfirm
-                    title="Undo cancellation?"
+                    title="Undo pause?"
                     description="This will restore the subscription for this vehicle."
                     okText="Yes, undo"
                     cancelText="No"
@@ -425,7 +486,7 @@ const Management = () => {
                       loading={undoLoading}
                       onClick={(e) => e.stopPropagation()}
                     >
-                      Undo Cancel
+                      Undo Pause
                     </Button>
                   </Popconfirm>
                 ) : null}
@@ -442,87 +503,84 @@ const Management = () => {
       {isLoading && <LoadingSpinner message="Loading data..." />}
       {!isLoading && (
         <PageContainer title="Free Trial Management">
-            <Collapse
-              className="bg-indigo-50 mb-3 sm:min-h-[30px] overflow-auto"
-              size="small"
-              activeKey={expandPanel}
-              onChange={() => {
-                if (expandPanel.length == 1) {
-                  setExpandPanel([]);
-                } else {
-                  setExpandPanel([1]);
-                }
-              }}
-              collapsible="icon"
-              items={[
-                {
-                  key: "1",
-                  label: "Vehicle Details",
-                  children: (
-                    <>
-                      <Form
-                        row
-                        size="medium"
-                        ref={formRef}
-                        layout="vertical"
-                        onFinish={onFinish}
-                        initialValues={formData}
-                        className="text-xs md:text-sm"
-                      >
-                        <Row gutter={[16, 4]}>
-                          <Col xs={24} sm={12} md={8} lg={6}>
-                            <Form.Item label="Email" name="email">
-                              <Input
-                                type="email"
-                                placeholder="Enter Email"
-                                style={{ marginBottom: 2 }}
-                                onChange={(e) => {
-                                  setFormData({
-                                    ...formData,
-                                    email: e.target.value,
-                                  });
-                                }}
-                              />
-                            </Form.Item>
-                          </Col>
-                          <Col xs={24} sm={12} md={8} lg={6}>
-                            <Form.Item
-                              label="Device Serial"
-                              name="deviceSerial"
-                            >
-                              <Input
-                                type="text"
-                                placeholder="Enter Device Serial"
-                                readOnly
-                                style={{ marginBottom: 2 }}
-                                onChange={(e) => {
-                                  setFormData({
-                                    ...formData,
-                                    email: e.target.value,
-                                  });
-                                }}
-                              />
-                            </Form.Item>
-                          </Col>
-                          <Col xs={24} sm={12} md={8} lg={6}>
-                            <Form.Item
-                              label="Free Trial Expiry"
-                              name="freeTrialEndDate"
-                            >
-                              <DatePicker
-                                style={{ width: "100%", marginBottom: 2 }}
-                                format="MM/DD/YYYY"
-                                onChange={handleDateChange}
-                                disabledDate={(current) =>
-                                  current && current < dayjs().startOf("day")
-                                }
-                              />
-                            </Form.Item>
-                          </Col>
-                        </Row>
-                        <Row>
-                          <Col span={24}>
-                            <div className="flex flex-wrap gap-2">
+          <Collapse
+            className="bg-indigo-50 mb-3 sm:min-h-[30px] overflow-auto"
+            size="small"
+            activeKey={expandPanel}
+            onChange={() => {
+              if (expandPanel.length == 1) {
+                setExpandPanel([]);
+              } else {
+                setExpandPanel([1]);
+              }
+            }}
+            collapsible="icon"
+            items={[
+              {
+                key: "1",
+                label: "Vehicle Details",
+                children: (
+                  <>
+                    <Form
+                      row
+                      size="medium"
+                      ref={formRef}
+                      layout="vertical"
+                      onFinish={onFinish}
+                      initialValues={formData}
+                      className="text-xs md:text-sm"
+                    >
+                      <Row gutter={[16, 4]}>
+                        <Col xs={24} sm={12} md={8} lg={6}>
+                          <Form.Item label="Email" name="email">
+                            <Input
+                              type="email"
+                              placeholder="Enter Email"
+                              style={{ marginBottom: 2 }}
+                              onChange={(e) => {
+                                setFormData({
+                                  ...formData,
+                                  email: e.target.value,
+                                });
+                              }}
+                            />
+                          </Form.Item>
+                        </Col>
+                        <Col xs={24} sm={12} md={8} lg={6}>
+                          <Form.Item label="Device Serial" name="deviceSerial">
+                            <Input
+                              type="text"
+                              placeholder="Enter Device Serial"
+                              readOnly
+                              style={{ marginBottom: 2 }}
+                              onChange={(e) => {
+                                setFormData({
+                                  ...formData,
+                                  email: e.target.value,
+                                });
+                              }}
+                            />
+                          </Form.Item>
+                        </Col>
+                        <Col xs={24} sm={12} md={8} lg={6}>
+                          <Form.Item
+                            label="Free Trial Expiry"
+                            name="freeTrialEndDate"
+                          >
+                            <DatePicker
+                              style={{ width: "100%", marginBottom: 2 }}
+                              format="MM/DD/YYYY"
+                              onChange={handleDateChange}
+                              disabledDate={(current) =>
+                                current && current < dayjs().startOf("day")
+                              }
+                            />
+                          </Form.Item>
+                        </Col>
+                      </Row>
+                      <Row>
+                        <Col span={24}>
+                          <div className="flex flex-wrap gap-2">
                             <Button
                               type="primary"
                               onClick={() => {
@@ -540,69 +598,69 @@ const Management = () => {
                             >
                               {isSaving ? "Saving..." : "Save Changes"}
                             </Button>
-                            </div>
-                          </Col>
-                        </Row>
-                      </Form>
+                          </div>
+                        </Col>
+                      </Row>
+                    </Form>
+                  </>
+                ),
+              },
+            ]}
+          />
+          {/* Duplicate Devices */}
+          {duplicateData.length > 0 && (
+            <Collapse
+              className="ant-collapse ant-collapse-icon-position-start ant-collapse-small bg-indigo-50 mb-3 min-h-[40px] overflow-hidden"
+              size="small"
+              collapsible="icon"
+              items={[
+                {
+                  key: "1",
+                  label: `Duplicate Devices (${duplicateData.length})`,
+                  children: (
+                    <>
+                      {isDesktop ? (
+                        <Table
+                          size="small"
+                          dataSource={duplicateData}
+                          columns={columns}
+                          pagination={false}
+                          scroll={{ y: 180, x: "max-content" }}
+                        />
+                      ) : (
+                        renderManagementCards(duplicateData)
+                      )}
                     </>
                   ),
                 },
               ]}
-            />
-            {/* Duplicate Devices */}
-            {duplicateData.length > 0 && (
-              <Collapse
-                className="ant-collapse ant-collapse-icon-position-start ant-collapse-small bg-indigo-50 mb-3 min-h-[40px] overflow-hidden"
-                size="small"
-                collapsible="icon"
-                items={[
-                  {
-                    key: "1",
-                    label: `Duplicate Devices (${duplicateData.length})`,
-                    children: (
-                      <>
-                        {isDesktop ? (
-                          <Table
-                            size="small"
-                            dataSource={duplicateData}
-                            columns={columns}
-                            pagination={false}
-                            scroll={{ y: 180, x: "max-content" }}
-                          />
-                        ) : (
-                          renderManagementCards(duplicateData)
-                        )}
-                      </>
-                    ),
-                  },
-                ]}
-              ></Collapse>
-            )}
+            ></Collapse>
+          )}
 
-            {/* Table Container - Ensure it grows and doesn't overflow */}
-            <div className="flex-grow min-h-0 overflow-auto">
-              <hr className="border-indigo-200" />
-              <Search
-                className="mt-3 w-full"
-                placeholder="input search text"
-                onSearch={(value) => onFilterData(value)}
+          {/* Table Container - Ensure it grows and doesn't overflow */}
+          <div className="flex-grow min-h-0 overflow-auto">
+            <hr className="border-indigo-200" />
+            <Search
+              className="mt-3 w-full"
+              placeholder="input search text"
+              onSearch={(value) => onFilterData(value)}
+            />
+            {filteredData.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-6 text-center text-sm text-gray-500">
+                No vehicles found.
+              </div>
+            ) : isDesktop ? (
+              <Table
+                size="small"
+                dataSource={filteredData}
+                columns={columns}
+                pagination={false}
+                scroll={tableScroll}
               />
-              {filteredData.length === 0 ? (
-                <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-6 text-center text-sm text-gray-500">
-                  No vehicles found.
-                </div>
-              ) : isDesktop ? (
-                <Table
-                  size="small"
-                  dataSource={filteredData}
-                  columns={columns}
-                  pagination={false}
-                  scroll={tableScroll}
-                />
-              ) : (
-                renderManagementCards(filteredData)
-              )}
-            </div>
+            ) : (
+              renderManagementCards(filteredData)
+            )}
+          </div>
         </PageContainer>
       )}
     </div>
